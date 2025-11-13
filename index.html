@@ -2,88 +2,86 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Plus Radio - Modern Radyo Dinleme Uygulaması">
-    <title>Plus Radio</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="description" content="Modern Radyo Dinleme Uygulaması">
+    <title>Radyo</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="app-container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <h1 class="logo">Plus Radio</h1>
-                <div class="search-container">
-                    <input type="text" id="searchInput" class="search-input" placeholder="Radyo ara...">
-                    <button class="search-btn" id="searchBtn">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <path d="m21 21-4.35-4.35"></path>
-                        </svg>
-                    </button>
-                </div>
+        <!-- Search Bar -->
+        <div class="search-bar">
+            <div class="search-wrapper">
+                <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <input type="text" id="searchInput" class="search-input" placeholder="Radyo ara...">
             </div>
-        </header>
+        </div>
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Player Section -->
-            <div class="player-section">
-                <div class="now-playing">
-                    <div class="station-logo-container">
-                        <img id="stationLogo" src="https://via.placeholder.com/200?text=Radio" alt="Station Logo" class="station-logo">
-                        <div class="equalizer">
-                            <span></span>
-                            <span></span>
-                            <span></span>
-                            <span></span>
-                        </div>
+            <!-- Categories Section -->
+            <div class="categories-section">
+                <div class="categories-container" id="categoryList">
+                    <!-- Categories will be populated by JS -->
+                </div>
+            </div>
+
+            <!-- Channels Section -->
+            <div class="channels-section">
+                <div class="channels-header">
+                    <h2 id="categoryTitle">Tüm Kanallar</h2>
+                    <span id="channelCount" class="channel-count">0 kanal</span>
+                </div>
+                <div class="channels-list" id="channelsGrid">
+                    <!-- Channels will be populated by JS -->
+                </div>
+            </div>
+        </main>
+
+        <!-- Bottom Player -->
+        <div class="bottom-player" id="bottomPlayer">
+            <div class="player-content">
+                <div class="player-station-info">
+                    <img id="stationLogo" src="" alt="Station Logo" class="player-logo">
+                    <div class="player-info">
+                        <div id="stationName" class="player-station-name">Radyo Seçin</div>
+                        <div id="stationGroup" class="player-station-group">-</div>
                     </div>
-                    <div class="station-info">
-                        <h2 id="stationName" class="station-name">Radyo Seçin</h2>
-                        <p id="stationGroup" class="station-group">-</p>
-                    </div>
-                    <div class="player-controls">
-                        <button class="control-btn volume-btn" id="volumeBtn">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                </div>
+                <div class="player-controls">
+                    <button class="player-btn favorite-btn" id="playerFavoriteBtn" title="Favorilere ekle">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                        </svg>
+                    </button>
+                    <button class="player-btn play-pause-btn" id="playPauseBtn">
+                        <svg class="play-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                        <svg class="pause-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+                            <rect x="6" y="4" width="4" height="16"></rect>
+                            <rect x="14" y="4" width="4" height="16"></rect>
+                        </svg>
+                    </button>
+                    <div class="volume-control">
+                        <button class="player-btn volume-btn" id="volumeBtn">
+                            <svg class="volume-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
                             </svg>
                         </button>
                         <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="80">
-                        <button class="control-btn play-pause-btn" id="playPauseBtn">
-                            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                            </svg>
-                        </button>
-                    </div>
-                    <audio id="audioPlayer" preload="none" crossorigin="anonymous"></audio>
-                </div>
-            </div>
-
-            <!-- Categories & Channels Section -->
-            <div class="channels-section">
-                <div class="categories-sidebar">
-                    <h3>Kategoriler</h3>
-                    <div class="category-list" id="categoryList">
-                        <!-- Categories will be populated by JS -->
-                    </div>
-                </div>
-                <div class="channels-list-container">
-                    <div class="channels-header">
-                        <h3 id="categoryTitle">Tüm Kanallar</h3>
-                        <span id="channelCount" class="channel-count">0 kanal</span>
-                    </div>
-                    <div class="channels-grid" id="channelsGrid">
-                        <!-- Channels will be populated by JS -->
                     </div>
                 </div>
             </div>
-        </main>
+            <audio id="audioPlayer" preload="none" crossorigin="anonymous"></audio>
+        </div>
     </div>
 
     <script src="m3u-parser.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
-

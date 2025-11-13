@@ -20,7 +20,9 @@ class RadioApp {
         this.volumeBtn = document.getElementById('volumeBtn');
         this.volumeSlider = document.getElementById('volumeSlider');
         this.searchInput = document.getElementById('searchInput');
-        this.searchBtn = document.getElementById('searchBtn');
+        this.searchBtn = null; // Removed from HTML
+        this.bottomPlayer = document.getElementById('bottomPlayer');
+        this.playerFavoriteBtn = document.getElementById('playerFavoriteBtn');
         
         this.init();
     }
@@ -212,13 +214,11 @@ class RadioApp {
             this.isLoading = false;
             this.updatePlayButton();
             this.hideLoadingState();
-            document.querySelector('.station-logo-container').classList.add('playing');
         });
 
         this.audio.addEventListener('pause', () => {
             this.isPlaying = false;
             this.updatePlayButton();
-            document.querySelector('.station-logo-container').classList.remove('playing');
         });
 
         this.audio.addEventListener('error', (e) => {
@@ -280,10 +280,6 @@ class RadioApp {
             }
         });
 
-        this.searchBtn.addEventListener('click', () => {
-            this.searchChannels(this.searchInput.value);
-        });
-
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
@@ -319,11 +315,6 @@ class RadioApp {
         recentItem.innerHTML = '<span class="category-icon">🕐</span> Son Dinlenenler';
         recentItem.addEventListener('click', () => this.selectCategory('Son Dinlenenler'));
         categoryList.appendChild(recentItem);
-
-        // Add separator
-        const separator = document.createElement('div');
-        separator.className = 'category-separator';
-        categoryList.appendChild(separator);
 
         // Add other categories
         const categories = this.parser.getCategories();
@@ -400,18 +391,17 @@ class RadioApp {
                 return;
             }
 
-            const card = document.createElement('div');
-            card.className = 'channel-card';
+            const item = document.createElement('div');
+            item.className = 'channel-item';
             
             if (this.currentStation && this.currentStation.name === station.name && 
                 this.currentStation.url === station.url) {
-                card.classList.add('playing');
+                item.classList.add('playing');
             }
 
             const isFav = this.isFavorite(station);
-            const favoriteIcon = isFav ? '❤️' : '🤍';
             
-            // Fix logo URL - convert http to https if needed, add referrer policy
+            // Fix logo URL - convert http to https if needed
             let logoUrl = station.logo || '';
             if (logoUrl && logoUrl.startsWith('http://')) {
                 logoUrl = logoUrl.replace('http://', 'https://');
@@ -420,25 +410,25 @@ class RadioApp {
                 logoUrl = this.generatePlaceholderUrl(station.name);
             }
             
-            card.innerHTML = `
-                <div class="channel-card-header">
-                    <button class="favorite-btn" title="${isFav ? 'Favorilerden çıkar' : 'Favorilere ekle'}">
-                        ${favoriteIcon}
-                    </button>
+            item.innerHTML = `
+                <img src="${logoUrl}" alt="${station.name}" class="channel-logo" 
+                     loading="lazy"
+                     referrerpolicy="no-referrer"
+                     crossorigin="anonymous"
+                     data-station-name="${station.name.replace(/"/g, '&quot;')}">
+                <div class="channel-info">
+                    <div class="channel-name">${station.name}</div>
+                    <div class="channel-group">${station.group || '-'}</div>
                 </div>
-                <div class="channel-logo-container-card">
-                    <img src="${logoUrl}" alt="${station.name}" class="channel-logo" 
-                         loading="lazy"
-                         referrerpolicy="no-referrer"
-                         crossorigin="anonymous"
-                         data-station-name="${station.name.replace(/"/g, '&quot;')}">
-                    <div class="logo-overlay"></div>
-                </div>
-                <div class="channel-name">${station.name}</div>
+                <button class="favorite-star ${isFav ? 'active' : ''}" title="${isFav ? 'Favorilerden çıkar' : 'Favorilere ekle'}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                    </svg>
+                </button>
             `;
 
             // Logo error handler
-            const logoImg = card.querySelector('.channel-logo');
+            const logoImg = item.querySelector('.channel-logo');
             logoImg.addEventListener('error', function() {
                 const stationName = this.getAttribute('data-station-name');
                 if (stationName) {
@@ -447,24 +437,25 @@ class RadioApp {
             });
 
             // Favorite button handler
-            const favBtn = card.querySelector('.favorite-btn');
+            const favBtn = item.querySelector('.favorite-star');
             favBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const isNowFavorite = this.toggleFavorite(station);
-                favBtn.innerHTML = isNowFavorite ? '❤️' : '🤍';
+                favBtn.classList.toggle('active', isNowFavorite);
                 favBtn.title = isNowFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle';
+                this.updatePlayerFavoriteButton();
                 if (this.currentCategory === 'Favoriler') {
                     this.renderChannels(); // Refresh if in favorites view
                 }
             });
 
-            // Card click handler
-            card.addEventListener('click', (e) => {
-                if (e.target.classList.contains('favorite-btn')) return;
+            // Item click handler
+            item.addEventListener('click', (e) => {
+                if (e.target.closest('.favorite-star')) return;
                 e.stopPropagation();
-                this.selectStation(station, card);
+                this.selectStation(station, item);
             });
-            channelsGrid.appendChild(card);
+            channelsGrid.appendChild(item);
         });
     }
 
@@ -490,13 +481,16 @@ class RadioApp {
         this.renderChannels();
     }
 
-    selectStation(station, cardElement = null) {
+    selectStation(station, itemElement = null) {
         this.currentStation = station;
         
         // Add to recently played
         this.addToRecentlyPlayed(station);
         
-        // Update UI
+        // Show bottom player
+        this.bottomPlayer.classList.add('visible');
+        
+        // Update bottom player UI
         document.getElementById('stationName').textContent = station.name;
         document.getElementById('stationGroup').textContent = station.group || '-';
         const logoImg = document.getElementById('stationLogo');
@@ -514,24 +508,24 @@ class RadioApp {
             this.src = window.radioApp.generatePlaceholderUrl(station.name);
         };
 
-        // Update playing state on cards
-        document.querySelectorAll('.channel-card').forEach(card => {
-            card.classList.remove('playing');
+        // Update playing state on channel items
+        document.querySelectorAll('.channel-item').forEach(item => {
+            item.classList.remove('playing');
         });
         
-        if (cardElement) {
-            cardElement.classList.add('playing');
+        if (itemElement) {
+            itemElement.classList.add('playing');
         } else {
-            // Find the card by station name and URL
-            document.querySelectorAll('.channel-card').forEach(card => {
-                const nameElement = card.querySelector('.channel-name');
+            // Find the item by station name and URL
+            document.querySelectorAll('.channel-item').forEach(item => {
+                const nameElement = item.querySelector('.channel-name');
                 if (nameElement && nameElement.textContent === station.name) {
-                    card.classList.add('playing');
+                    item.classList.add('playing');
                 }
             });
         }
 
-        // Update favorite button in player area if needed
+        // Update favorite button in player area
         this.updatePlayerFavoriteButton();
 
         // Load and play
@@ -539,7 +533,32 @@ class RadioApp {
     }
     
     updatePlayerFavoriteButton() {
-        // This can be used to show favorite status in player area if needed
+        if (!this.currentStation) return;
+        
+        const isFav = this.isFavorite(this.currentStation);
+        this.playerFavoriteBtn.classList.toggle('active', isFav);
+        this.playerFavoriteBtn.title = isFav ? 'Favorilerden çıkar' : 'Favorilere ekle';
+        
+        // Add click handler if not already added
+        if (!this.playerFavoriteBtn.hasAttribute('data-handler-attached')) {
+            this.playerFavoriteBtn.setAttribute('data-handler-attached', 'true');
+            this.playerFavoriteBtn.addEventListener('click', () => {
+                const isNowFavorite = this.toggleFavorite(this.currentStation);
+                this.playerFavoriteBtn.classList.toggle('active', isNowFavorite);
+                this.playerFavoriteBtn.title = isNowFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle';
+                
+                // Update favorite star in channel list
+                document.querySelectorAll('.channel-item').forEach(item => {
+                    const nameElement = item.querySelector('.channel-name');
+                    if (nameElement && nameElement.textContent === this.currentStation.name) {
+                        const favBtn = item.querySelector('.favorite-star');
+                        if (favBtn) {
+                            favBtn.classList.toggle('active', isNowFavorite);
+                        }
+                    }
+                });
+            });
+        }
     }
 
     loadStation(url) {
