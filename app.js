@@ -43,6 +43,23 @@ class RadioApp {
         if (!this.brokenStations.has(stationId)) {
             this.brokenStations.add(stationId);
             this.saveBrokenStations();
+            
+            // Check if category should be removed
+            const stationCategory = station.group || 'Tümü';
+            if (stationCategory !== 'Tümü' && stationCategory !== 'Favoriler' && stationCategory !== 'Son Dinlenenler') {
+                const stationsInCategory = this.parser.getStationsByCategory(stationCategory);
+                const workingStations = stationsInCategory.filter(s => !this.isBroken(s));
+                
+                // If no working stations left in category, refresh category list
+                if (workingStations.length === 0) {
+                    this.renderCategories();
+                    // If we were viewing this category, switch to "Tümü"
+                    if (this.currentCategory === stationCategory) {
+                        this.selectCategory('Tümü');
+                    }
+                }
+            }
+            
             // Remove from UI if currently displayed
             if (this.currentCategory !== 'Favoriler' && this.currentCategory !== 'Son Dinlenenler') {
                 this.renderChannels(this.searchInput.value);
@@ -224,7 +241,7 @@ class RadioApp {
         this.audio.addEventListener('loadstart', () => {
             this.isLoading = true;
             this.showLoadingState();
-            // Set timeout for slow connections (8 seconds)
+            // Set timeout for slow connections (15 seconds)
             this.loadingTimeout = setTimeout(() => {
                 if (this.isLoading && this.currentStation) {
                     console.warn('Loading timeout for:', this.currentStation.name);
@@ -233,7 +250,7 @@ class RadioApp {
                     this.showError('Radyo yayını çok yavaş yükleniyor. Liste güncellendi.');
                     this.findNextWorkingStation();
                 }
-            }, 8000);
+            }, 15000);
         });
 
         this.audio.addEventListener('canplay', () => {
@@ -249,7 +266,7 @@ class RadioApp {
                     this.markAsBroken(this.currentStation);
                     this.findNextWorkingStation();
                 }
-            }, 5000);
+            }, 15000);
         });
 
         // Search
@@ -317,6 +334,15 @@ class RadioApp {
                 category.startsWith('----------') ||
                 !category || 
                 category.length < 2) {
+                return;
+            }
+
+            // Check if category has any working stations
+            const stationsInCategory = this.parser.getStationsByCategory(category);
+            const workingStations = stationsInCategory.filter(s => !this.isBroken(s));
+            
+            // Skip category if no working stations
+            if (workingStations.length === 0) {
                 return;
             }
 
