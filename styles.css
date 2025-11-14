@@ -723,6 +723,7 @@ body {
     flex: 1;
     min-width: 0;
     height: 100%;
+    cursor: pointer;
 }
 
 .player-spectrum-wrapper {
@@ -738,6 +739,7 @@ body {
     align-items: center;
     justify-content: center;
     transition: all 0.3s ease;
+    cursor: pointer;
 }
 
 .player-spectrum-canvas {
@@ -757,6 +759,7 @@ body {
     object-fit: cover;
     flex-shrink: 0;
     background: var(--background);
+    cursor: pointer;
 }
 
 .player-info {
@@ -767,6 +770,7 @@ body {
     justify-content: center;
     align-items: flex-start;
     text-align: left;
+    cursor: pointer;
 }
 
 .player-station-name {

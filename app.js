@@ -711,6 +711,29 @@ class RadioApp {
                 this.handleSpectrumTap(e);
             });
         }
+        
+        // Bottom player tap controls (butonlar hariç)
+        if (this.bottomPlayer) {
+            this.bottomPlayer.addEventListener('click', (e) => {
+                // Butonlara, inputlara veya kontrollere tıklanmışsa işlem yapma
+                if (e.target.closest('.player-btn') || 
+                    e.target.closest('.player-controls') ||
+                    e.target.closest('.volume-control') ||
+                    e.target.closest('.volume-slider') ||
+                    e.target.closest('input') ||
+                    e.target.closest('button')) {
+                    return;
+                }
+                
+                // Spektrum canvas'a tıklanmışsa zaten handleSpectrumTap çalışacak
+                if (e.target === this.playerSpectrumCanvas || e.target.closest('.player-spectrum-wrapper')) {
+                    return;
+                }
+                
+                // Diğer alanlara tıklanmışsa aynı işlevi yap
+                this.handleSpectrumTap(e);
+            });
+        }
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
