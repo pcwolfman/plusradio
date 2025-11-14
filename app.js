@@ -1099,8 +1099,10 @@ class RadioApp {
     updatePlayButton() {
         if (this.isPlaying) {
             this.playPauseBtn.classList.add('playing');
+            this.playPauseBtn.title = 'Durdur';
         } else {
             this.playPauseBtn.classList.remove('playing');
+            this.playPauseBtn.title = 'Oynat';
         }
     }
 
