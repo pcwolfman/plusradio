@@ -266,30 +266,49 @@ class RadioApp {
     initSpectrum() {
         // Initialize player spectrum canvas
         const playerCanvas = this.playerSpectrumCanvas;
-        if (playerCanvas) {
-            const resizePlayerCanvas = () => {
+        if (!playerCanvas) {
+            console.warn('Player spectrum canvas element not found');
+            return;
+        }
+        
+        const resizePlayerCanvas = () => {
+            try {
                 const wrapper = playerCanvas.parentElement;
-                if (wrapper && wrapper.clientWidth > 0) {
+                if (wrapper && typeof wrapper.clientWidth !== 'undefined' && wrapper.clientWidth > 0) {
                     playerCanvas.width = wrapper.clientWidth;
                     playerCanvas.height = wrapper.clientHeight || 60;
                 } else {
-                    // Fallback if wrapper not ready
-                    playerCanvas.width = 300;
-                    playerCanvas.height = 60;
+                    // Fallback if wrapper not ready - use computed style or defaults
+                    const computedStyle = window.getComputedStyle(wrapper || playerCanvas);
+                    const width = parseInt(computedStyle.width) || 300;
+                    const height = parseInt(computedStyle.height) || 60;
+                    playerCanvas.width = width;
+                    playerCanvas.height = height;
                 }
-            };
-            
-            // Wait for DOM to be ready
-            setTimeout(() => {
-                resizePlayerCanvas();
-            }, 100);
-            
-            window.addEventListener('resize', resizePlayerCanvas);
-            
-            // Also resize when bottom player becomes visible
+            } catch (error) {
+                console.warn('Error resizing player spectrum canvas:', error);
+                // Safe fallback
+                playerCanvas.width = 300;
+                playerCanvas.height = 60;
+            }
+        };
+        
+        // Wait for DOM to be ready - longer timeout for Android
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(resizePlayerCanvas, 200);
+            });
+        } else {
+            setTimeout(resizePlayerCanvas, 200);
+        }
+        
+        window.addEventListener('resize', resizePlayerCanvas);
+        
+        // Also resize when bottom player becomes visible
+        if (this.bottomPlayer) {
             const observer = new MutationObserver(() => {
-                if (this.bottomPlayer.classList.contains('visible')) {
-                    setTimeout(resizePlayerCanvas, 50);
+                if (this.bottomPlayer && this.bottomPlayer.classList.contains('visible')) {
+                    setTimeout(resizePlayerCanvas, 100);
                 }
             });
             observer.observe(this.bottomPlayer, { attributes: true, attributeFilter: ['class'] });
@@ -321,8 +340,30 @@ class RadioApp {
                     this.analyser.connect(this.audioContext.destination);
                 }
                 
+                // Ensure canvas has dimensions before starting animation
+                if (this.playerSpectrumCanvas) {
+                    const wrapper = this.playerSpectrumCanvas.parentElement;
+                    if (this.playerSpectrumCanvas.width === 0 || this.playerSpectrumCanvas.height === 0) {
+                        try {
+                            if (wrapper && typeof wrapper.clientWidth !== 'undefined' && wrapper.clientWidth > 0) {
+                                this.playerSpectrumCanvas.width = wrapper.clientWidth;
+                                this.playerSpectrumCanvas.height = wrapper.clientHeight || 60;
+                            } else {
+                                const computedStyle = window.getComputedStyle(wrapper || this.playerSpectrumCanvas);
+                                this.playerSpectrumCanvas.width = parseInt(computedStyle.width) || 300;
+                                this.playerSpectrumCanvas.height = parseInt(computedStyle.height) || 60;
+                            }
+                        } catch (e) {
+                            this.playerSpectrumCanvas.width = 300;
+                            this.playerSpectrumCanvas.height = 60;
+                        }
+                    }
+                }
+                
                 // Start player spectrum animation
-                this.startPlayerSpectrumAnimation();
+                setTimeout(() => {
+                    this.startPlayerSpectrumAnimation();
+                }, 100);
             } catch (error) {
                 console.warn('Web Audio API not supported or CORS issue:', error);
             }
@@ -331,9 +372,28 @@ class RadioApp {
             if (this.audioContext.state === 'suspended') {
                 this.audioContext.resume();
             }
+            // Ensure canvas has dimensions
+            if (this.playerSpectrumCanvas && (this.playerSpectrumCanvas.width === 0 || this.playerSpectrumCanvas.height === 0)) {
+                const wrapper = this.playerSpectrumCanvas.parentElement;
+                try {
+                    if (wrapper && typeof wrapper.clientWidth !== 'undefined' && wrapper.clientWidth > 0) {
+                        this.playerSpectrumCanvas.width = wrapper.clientWidth;
+                        this.playerSpectrumCanvas.height = wrapper.clientHeight || 60;
+                    } else {
+                        const computedStyle = window.getComputedStyle(wrapper || this.playerSpectrumCanvas);
+                        this.playerSpectrumCanvas.width = parseInt(computedStyle.width) || 300;
+                        this.playerSpectrumCanvas.height = parseInt(computedStyle.height) || 60;
+                    }
+                } catch (e) {
+                    this.playerSpectrumCanvas.width = 300;
+                    this.playerSpectrumCanvas.height = 60;
+                }
+            }
             // Start animation if not already running
             if (!this.playerSpectrumAnimationId) {
-                this.startPlayerSpectrumAnimation();
+                setTimeout(() => {
+                    this.startPlayerSpectrumAnimation();
+                }, 100);
             }
         }
     }
@@ -372,14 +432,27 @@ class RadioApp {
         const wrapper = canvas.parentElement;
         let width, height;
         
-        if (wrapper && wrapper.clientWidth > 0 && wrapper.clientHeight > 0) {
-            width = wrapper.clientWidth;
-            height = wrapper.clientHeight;
-        } else {
-            // Use CSS computed dimensions or defaults
-            const computedStyle = window.getComputedStyle(wrapper || canvas);
-            width = parseInt(computedStyle.width) || 300;
-            height = parseInt(computedStyle.height) || 60;
+        try {
+            if (wrapper && typeof wrapper.clientWidth !== 'undefined' && wrapper.clientWidth > 0 && 
+                typeof wrapper.clientHeight !== 'undefined' && wrapper.clientHeight > 0) {
+                width = wrapper.clientWidth;
+                height = wrapper.clientHeight;
+            } else {
+                // Use CSS computed dimensions or defaults
+                try {
+                    const computedStyle = window.getComputedStyle(wrapper || canvas);
+                    width = parseInt(computedStyle.width) || 300;
+                    height = parseInt(computedStyle.height) || 60;
+                } catch (e) {
+                    // Final fallback
+                    width = 300;
+                    height = 60;
+                }
+            }
+        } catch (error) {
+            console.warn('Error getting canvas dimensions:', error);
+            width = 300;
+            height = 60;
         }
         
         canvas.width = width;
@@ -393,12 +466,18 @@ class RadioApp {
                 return;
             }
             
-            // Update dimensions if needed
-            if (wrapper && (canvas.width !== wrapper.clientWidth || canvas.height !== wrapper.clientHeight)) {
-                width = wrapper.clientWidth || 300;
-                height = wrapper.clientHeight || 60;
-                canvas.width = width;
-                canvas.height = height;
+            // Update dimensions if needed - with null checks
+            try {
+                if (wrapper && typeof wrapper.clientWidth !== 'undefined' && 
+                    typeof wrapper.clientHeight !== 'undefined' &&
+                    (canvas.width !== wrapper.clientWidth || canvas.height !== wrapper.clientHeight)) {
+                    width = wrapper.clientWidth || 300;
+                    height = wrapper.clientHeight || 60;
+                    canvas.width = width;
+                    canvas.height = height;
+                }
+            } catch (error) {
+                // Ignore resize errors, continue with current dimensions
             }
             
             this.analyser.getByteFrequencyData(this.dataArray);
@@ -824,12 +903,28 @@ class RadioApp {
         // Resize player spectrum canvas when player becomes visible
         if (this.playerSpectrumCanvas) {
             setTimeout(() => {
-                const wrapper = this.playerSpectrumCanvas.parentElement;
-                if (wrapper) {
-                    this.playerSpectrumCanvas.width = wrapper.clientWidth || 300;
-                    this.playerSpectrumCanvas.height = wrapper.clientHeight || 60;
+                try {
+                    const wrapper = this.playerSpectrumCanvas.parentElement;
+                    if (wrapper && typeof wrapper.clientWidth !== 'undefined') {
+                        this.playerSpectrumCanvas.width = wrapper.clientWidth || 300;
+                        this.playerSpectrumCanvas.height = wrapper.clientHeight || 60;
+                    } else {
+                        // Use computed style or defaults
+                        try {
+                            const computedStyle = window.getComputedStyle(wrapper || this.playerSpectrumCanvas);
+                            this.playerSpectrumCanvas.width = parseInt(computedStyle.width) || 300;
+                            this.playerSpectrumCanvas.height = parseInt(computedStyle.height) || 60;
+                        } catch (e) {
+                            this.playerSpectrumCanvas.width = 300;
+                            this.playerSpectrumCanvas.height = 60;
+                        }
+                    }
+                } catch (error) {
+                    console.warn('Error resizing canvas in selectStation:', error);
+                    this.playerSpectrumCanvas.width = 300;
+                    this.playerSpectrumCanvas.height = 60;
                 }
-            }, 100);
+            }, 150);
         }
         
         // Update bottom player UI
