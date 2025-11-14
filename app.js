@@ -14,6 +14,7 @@ class RadioApp {
         this.brokenStations = this.loadBrokenStations();
         this.loadingTimeout = null;
         this.isLoading = false;
+        this.viewMode = this.loadViewMode(); // 'compact', 'normal', 'grid'
         
         this.audio = document.getElementById('audioPlayer');
         this.playPauseBtn = document.getElementById('playPauseBtn');
@@ -23,8 +24,89 @@ class RadioApp {
         this.searchBtn = null; // Removed from HTML
         this.bottomPlayer = document.getElementById('bottomPlayer');
         this.playerFavoriteBtn = document.getElementById('playerFavoriteBtn');
+        this.listToggleBtn = document.getElementById('listToggleBtn');
+        this.spectrumContainer = document.getElementById('spectrumContainer');
+        this.spectrumCanvas = document.getElementById('spectrumCanvas');
+        this.spectrumStationName = document.getElementById('spectrumStationName');
+        this.spectrumFrequency = document.getElementById('spectrumFrequency');
+        
+        // Web Audio API for spectrum analysis
+        this.audioContext = null;
+        this.analyser = null;
+        this.dataArray = null;
+        this.spectrumAnimationId = null;
         
         this.init();
+    }
+    
+    loadViewMode() {
+        try {
+            const stored = localStorage.getItem('plusRadio_viewMode');
+            return stored || 'normal'; // 'compact', 'normal', 'grid'
+        } catch (e) {
+            return 'normal';
+        }
+    }
+    
+    saveViewMode() {
+        localStorage.setItem('plusRadio_viewMode', this.viewMode);
+    }
+    
+    toggleViewMode() {
+        // Cycle through: normal -> compact -> grid -> normal
+        if (this.viewMode === 'normal') {
+            this.viewMode = 'compact';
+        } else if (this.viewMode === 'compact') {
+            this.viewMode = 'grid';
+        } else {
+            this.viewMode = 'normal';
+        }
+        this.saveViewMode();
+        this.updateViewModeIcon();
+        this.renderChannels(this.searchInput.value);
+    }
+    
+    updateViewModeIcon() {
+        const btn = this.listToggleBtn;
+        if (!btn) return;
+        
+        let iconSvg = '';
+        if (this.viewMode === 'compact') {
+            // Compact icon - küçük kutucuklar
+            iconSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+            </svg>`;
+        } else if (this.viewMode === 'grid') {
+            // Grid icon - orta kutucuklar
+            iconSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="5" height="5"></rect>
+                <rect x="9" y="3" width="5" height="5"></rect>
+                <rect x="15" y="3" width="5" height="5"></rect>
+                <rect x="3" y="9" width="5" height="5"></rect>
+                <rect x="9" y="9" width="5" height="5"></rect>
+                <rect x="15" y="9" width="5" height="5"></rect>
+                <rect x="3" y="15" width="5" height="5"></rect>
+                <rect x="9" y="15" width="5" height="5"></rect>
+                <rect x="15" y="15" width="5" height="5"></rect>
+            </svg>`;
+        } else {
+            // Normal icon - liste
+            iconSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>`;
+        }
+        btn.innerHTML = iconSvg;
+        btn.title = this.viewMode === 'compact' ? 'Küçük kutucuk görünümü' : 
+                    this.viewMode === 'grid' ? 'Orta kutucuk görünümü' : 
+                    'Liste görünümü';
     }
     
     loadBrokenStations() {
@@ -175,11 +257,186 @@ class RadioApp {
             this.renderCategories();
             this.renderChannels();
             this.setupEventListeners();
+            this.updateViewModeIcon();
+            this.initSpectrum();
             
         } catch (error) {
             console.error('Hata:', error);
             this.showError(error.message);
         }
+    }
+    
+    initSpectrum() {
+        // Initialize canvas
+        const canvas = this.spectrumCanvas;
+        const container = this.spectrumContainer;
+        
+        const resizeCanvas = () => {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        };
+        
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Initialize Web Audio API when audio starts playing
+    }
+    
+    setupAudioContext() {
+        if (!this.audioContext) {
+            try {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                this.analyser = this.audioContext.createAnalyser();
+                this.analyser.fftSize = 256; // Higher resolution
+                this.analyser.smoothingTimeConstant = 0.8;
+                
+                const bufferLength = this.analyser.frequencyBinCount;
+                this.dataArray = new Uint8Array(bufferLength);
+                
+                // Connect audio element to analyser
+                // Note: createMediaElementSource can only be called once per audio element
+                try {
+                    const source = this.audioContext.createMediaElementSource(this.audio);
+                    source.connect(this.analyser);
+                    this.analyser.connect(this.audioContext.destination);
+                } catch (e) {
+                    // If source already exists, just connect analyser to destination
+                    this.audio.connect(this.analyser);
+                    this.analyser.connect(this.audioContext.destination);
+                }
+                
+                // Start spectrum animation
+                this.startSpectrumAnimation();
+            } catch (error) {
+                console.warn('Web Audio API not supported or CORS issue:', error);
+                // Hide spectrum if not supported
+                if (this.spectrumContainer) {
+                    this.spectrumContainer.classList.remove('visible');
+                }
+            }
+        } else {
+            // Resume audio context if suspended (required by some browsers)
+            if (this.audioContext.state === 'suspended') {
+                this.audioContext.resume();
+            }
+            // Start animation if not already running
+            if (!this.spectrumAnimationId) {
+                this.startSpectrumAnimation();
+            }
+        }
+    }
+    
+    startSpectrumAnimation() {
+        if (this.spectrumAnimationId) {
+            cancelAnimationFrame(this.spectrumAnimationId);
+        }
+        
+        const canvas = this.spectrumCanvas;
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        const draw = () => {
+            if (!this.analyser || !this.isPlaying) {
+                this.spectrumAnimationId = null;
+                return;
+            }
+            
+            this.analyser.getByteFrequencyData(this.dataArray);
+            
+            // Clear canvas with gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, 'rgba(15, 23, 42, 0.95)');
+            gradient.addColorStop(1, 'rgba(30, 41, 59, 0.95)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+            
+            const barCount = this.dataArray.length;
+            const barWidth = width / barCount * 2.5;
+            let x = 0;
+            let maxFreq = 0;
+            let maxFreqIndex = 0;
+            
+            // Draw spectrum bars with smooth animation
+            for (let i = 0; i < barCount; i++) {
+                const dataValue = this.dataArray[i];
+                const barHeight = (dataValue / 255) * height * 0.85;
+                
+                // Find peak frequency
+                if (dataValue > maxFreq) {
+                    maxFreq = dataValue;
+                    maxFreqIndex = i;
+                }
+                
+                // Calculate hue based on frequency (lower = red, higher = blue)
+                const hue = 240 - (i / barCount) * 180; // Blue to red spectrum
+                const saturation = 100;
+                const lightness = 50 + (dataValue / 255) * 20;
+                
+                // Create gradient for each bar
+                const barGradient = ctx.createLinearGradient(x, height, x, height - barHeight);
+                barGradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness}%, 0.8)`);
+                barGradient.addColorStop(0.5, `hsla(${hue + 20}, ${saturation}%, ${lightness + 10}%, 0.9)`);
+                barGradient.addColorStop(1, `hsla(${hue + 40}, ${saturation}%, ${lightness + 20}%, 1)`);
+                
+                // Draw main bar
+                ctx.fillStyle = barGradient;
+                ctx.fillRect(x, height - barHeight, barWidth - 2, barHeight);
+                
+                // Add glow effect
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                ctx.fillRect(x, height - barHeight, barWidth - 2, barHeight);
+                ctx.shadowBlur = 0;
+                
+                // Add peak indicator (small circle on top)
+                if (dataValue > 200) {
+                    ctx.fillStyle = `hsl(${hue + 40}, ${saturation}%, 80%)`;
+                    ctx.beginPath();
+                    ctx.arc(x + barWidth / 2 - 1, height - barHeight - 3, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                x += barWidth;
+            }
+            
+            // Draw mirror effect (bottom reflection)
+            ctx.globalAlpha = 0.3;
+            for (let i = 0; i < barCount; i++) {
+                const barHeight = (this.dataArray[i] / 255) * height * 0.3;
+                const barX = (width / barCount * 2.5) * i;
+                const barW = width / barCount * 2.5 - 1;
+                
+                const hue = (i / barCount) * 360;
+                ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+                ctx.fillRect(barX, height, barW, barHeight);
+            }
+            ctx.globalAlpha = 1;
+            
+            // Update frequency display
+            if (maxFreq > 0) {
+                const sampleRate = this.audioContext.sampleRate;
+                const nyquist = sampleRate / 2;
+                const frequency = (maxFreqIndex / barCount) * nyquist;
+                this.spectrumFrequency.textContent = `${Math.round(frequency)} Hz`;
+            }
+            
+            this.spectrumAnimationId = requestAnimationFrame(draw);
+        };
+        
+        draw();
+    }
+    
+    stopSpectrumAnimation() {
+        if (this.spectrumAnimationId) {
+            cancelAnimationFrame(this.spectrumAnimationId);
+            this.spectrumAnimationId = null;
+        }
+        
+        // Clear canvas
+        const canvas = this.spectrumCanvas;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
     setupEventListeners() {
@@ -214,11 +471,14 @@ class RadioApp {
             this.isLoading = false;
             this.updatePlayButton();
             this.hideLoadingState();
+            this.setupAudioContext();
+            this.spectrumContainer.classList.add('visible');
         });
 
         this.audio.addEventListener('pause', () => {
             this.isPlaying = false;
             this.updatePlayButton();
+            this.stopSpectrumAnimation();
         });
 
         this.audio.addEventListener('error', (e) => {
@@ -279,6 +539,23 @@ class RadioApp {
                 this.searchChannels(e.target.value);
             }
         });
+
+        // View mode toggle
+        if (this.listToggleBtn) {
+            this.listToggleBtn.addEventListener('click', () => {
+                this.toggleViewMode();
+            });
+        }
+
+        // Spectrum container click to close
+        if (this.spectrumContainer) {
+            this.spectrumContainer.addEventListener('click', (e) => {
+                // Only close if clicking on the container itself, not on info overlay
+                if (e.target === this.spectrumContainer || e.target === this.spectrumCanvas) {
+                    this.spectrumContainer.classList.remove('visible');
+                }
+            });
+        }
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
@@ -348,6 +625,16 @@ class RadioApp {
     renderChannels(searchQuery = '') {
         const channelsGrid = document.getElementById('channelsGrid');
         channelsGrid.innerHTML = '';
+        
+        // Update class based on view mode
+        channelsGrid.className = 'channels-list';
+        if (this.viewMode === 'compact') {
+            channelsGrid.classList.add('view-compact');
+        } else if (this.viewMode === 'grid') {
+            channelsGrid.classList.add('view-grid');
+        } else {
+            channelsGrid.classList.add('view-normal');
+        }
 
         let stations;
         if (searchQuery) {
@@ -410,22 +697,63 @@ class RadioApp {
                 logoUrl = this.generatePlaceholderUrl(station.name);
             }
             
-            item.innerHTML = `
-                <img src="${logoUrl}" alt="${station.name}" class="channel-logo" 
-                     loading="lazy"
-                     referrerpolicy="no-referrer"
-                     crossorigin="anonymous"
-                     data-station-name="${station.name.replace(/"/g, '&quot;')}">
-                <div class="channel-info">
-                    <div class="channel-name">${station.name}</div>
-                    <div class="channel-group">${station.group || '-'}</div>
-                </div>
-                <button class="favorite-star ${isFav ? 'active' : ''}" title="${isFav ? 'Favorilerden çıkar' : 'Favorilere ekle'}">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                    </svg>
-                </button>
-            `;
+            // Different HTML structure based on view mode
+            if (this.viewMode === 'compact') {
+                // Compact view: küçük kutucuklar, sadece logo ve isim
+                item.innerHTML = `
+                    <img src="${logoUrl}" alt="${station.name}" class="channel-logo" 
+                         loading="lazy"
+                         referrerpolicy="no-referrer"
+                         crossorigin="anonymous"
+                         data-station-name="${station.name.replace(/"/g, '&quot;')}">
+                    <div class="channel-info">
+                        <div class="channel-name">${station.name}</div>
+                    </div>
+                    <button class="favorite-star ${isFav ? 'active' : ''}" title="${isFav ? 'Favorilerden çıkar' : 'Favorilere ekle'}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                        </svg>
+                    </button>
+                `;
+            } else if (this.viewMode === 'grid') {
+                // Grid view: orta kutucuklar, logo üstte, isim ve kategori altta
+                item.innerHTML = `
+                    <div class="channel-logo-wrapper">
+                        <img src="${logoUrl}" alt="${station.name}" class="channel-logo" 
+                             loading="lazy"
+                             referrerpolicy="no-referrer"
+                             crossorigin="anonymous"
+                             data-station-name="${station.name.replace(/"/g, '&quot;')}">
+                        <button class="favorite-star ${isFav ? 'active' : ''}" title="${isFav ? 'Favorilerden çıkar' : 'Favorilere ekle'}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="channel-info">
+                        <div class="channel-name">${station.name}</div>
+                        <div class="channel-group">${station.group || '-'}</div>
+                    </div>
+                `;
+            } else {
+                // Normal view: liste görünümü (mevcut)
+                item.innerHTML = `
+                    <img src="${logoUrl}" alt="${station.name}" class="channel-logo" 
+                         loading="lazy"
+                         referrerpolicy="no-referrer"
+                         crossorigin="anonymous"
+                         data-station-name="${station.name.replace(/"/g, '&quot;')}">
+                    <div class="channel-info">
+                        <div class="channel-name">${station.name}</div>
+                        <div class="channel-group">${station.group || '-'}</div>
+                    </div>
+                    <button class="favorite-star ${isFav ? 'active' : ''}" title="${isFav ? 'Favorilerden çıkar' : 'Favorilere ekle'}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                        </svg>
+                    </button>
+                `;
+            }
 
             // Logo error handler
             const logoImg = item.querySelector('.channel-logo');
@@ -438,16 +766,18 @@ class RadioApp {
 
             // Favorite button handler
             const favBtn = item.querySelector('.favorite-star');
-            favBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const isNowFavorite = this.toggleFavorite(station);
-                favBtn.classList.toggle('active', isNowFavorite);
-                favBtn.title = isNowFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle';
-                this.updatePlayerFavoriteButton();
-                if (this.currentCategory === 'Favoriler') {
-                    this.renderChannels(); // Refresh if in favorites view
-                }
-            });
+            if (favBtn) {
+                favBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isNowFavorite = this.toggleFavorite(station);
+                    favBtn.classList.toggle('active', isNowFavorite);
+                    favBtn.title = isNowFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle';
+                    this.updatePlayerFavoriteButton();
+                    if (this.currentCategory === 'Favoriler') {
+                        this.renderChannels(); // Refresh if in favorites view
+                    }
+                });
+            }
 
             // Item click handler
             item.addEventListener('click', (e) => {
@@ -502,6 +832,11 @@ class RadioApp {
             logoUrl = this.generatePlaceholderUrl(station.name);
         }
         logoImg.src = logoUrl;
+        
+        // Update spectrum display
+        if (this.spectrumStationName) {
+            this.spectrumStationName.textContent = station.name;
+        }
         logoImg.setAttribute('referrerpolicy', 'no-referrer');
         logoImg.setAttribute('crossorigin', 'anonymous');
         logoImg.onerror = function() {
