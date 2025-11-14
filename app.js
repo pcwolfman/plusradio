@@ -36,6 +36,11 @@ class RadioApp {
         this.appContainer = document.getElementById('appContainer');
         this.offlineMessage = document.getElementById('offlineMessage');
         
+        // Player state: 'normal', 'minimized', 'fullscreen'
+        this.playerState = 'normal';
+        this.lastTapTime = 0;
+        this.tapTimeout = null;
+        
         // Check online status and setup listeners
         this.checkOnlineStatus();
         this.setupOnlineListeners();
@@ -700,6 +705,12 @@ class RadioApp {
             });
         }
 
+        // Spectrum canvas tap controls
+        if (this.playerSpectrumCanvas) {
+            this.playerSpectrumCanvas.addEventListener('click', (e) => {
+                this.handleSpectrumTap(e);
+            });
+        }
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
@@ -710,6 +721,83 @@ class RadioApp {
                 }
             }
         });
+    }
+    
+    handleSpectrumTap(e) {
+        const currentTime = Date.now();
+        const timeSinceLastTap = currentTime - this.lastTapTime;
+        
+        // Clear any pending single tap timeout
+        if (this.tapTimeout) {
+            clearTimeout(this.tapTimeout);
+            this.tapTimeout = null;
+        }
+        
+        // If fullscreen, single tap returns to normal
+        if (this.playerState === 'fullscreen') {
+            this.setPlayerState('normal');
+            this.lastTapTime = 0;
+            return;
+        }
+        
+        // Check for double tap (within 300ms)
+        if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
+            // Double tap - go to fullscreen
+            this.setPlayerState('fullscreen');
+            this.lastTapTime = 0;
+        } else {
+            // Single tap - wait to see if it's a double tap
+            this.lastTapTime = currentTime;
+            this.tapTimeout = setTimeout(() => {
+                // Single tap - minimize
+                if (this.playerState === 'normal') {
+                    this.setPlayerState('minimized');
+                } else if (this.playerState === 'minimized') {
+                    this.setPlayerState('normal');
+                }
+                this.lastTapTime = 0;
+                this.tapTimeout = null;
+            }, 300);
+        }
+    }
+    
+    setPlayerState(state) {
+        this.playerState = state;
+        
+        if (!this.bottomPlayer) return;
+        
+        // Remove all state classes
+        this.bottomPlayer.classList.remove('player-normal', 'player-minimized', 'player-fullscreen');
+        
+        // Add new state class
+        this.bottomPlayer.classList.add(`player-${state}`);
+        
+        // Resize spectrum canvas when state changes
+        setTimeout(() => {
+            this.resizeSpectrumCanvas();
+        }, 100);
+    }
+    
+    resizeSpectrumCanvas() {
+        if (!this.playerSpectrumCanvas) return;
+        
+        const wrapper = this.playerSpectrumCanvas.parentElement;
+        if (!wrapper) return;
+        
+        try {
+            if (wrapper && typeof wrapper.clientWidth !== 'undefined' && wrapper.clientWidth > 0) {
+                this.playerSpectrumCanvas.width = wrapper.clientWidth;
+                this.playerSpectrumCanvas.height = wrapper.clientHeight || 60;
+            } else {
+                const computedStyle = window.getComputedStyle(wrapper || this.playerSpectrumCanvas);
+                this.playerSpectrumCanvas.width = parseInt(computedStyle.width) || 300;
+                this.playerSpectrumCanvas.height = parseInt(computedStyle.height) || 60;
+            }
+        } catch (error) {
+            console.warn('Error resizing spectrum canvas:', error);
+            this.playerSpectrumCanvas.width = 300;
+            this.playerSpectrumCanvas.height = 60;
+        }
     }
 
     renderCategories() {
@@ -963,6 +1051,7 @@ class RadioApp {
         
         // Show bottom player
         this.bottomPlayer.classList.add('visible');
+        this.setPlayerState('normal');
         
         // Resize player spectrum canvas when player becomes visible
         if (this.playerSpectrumCanvas) {

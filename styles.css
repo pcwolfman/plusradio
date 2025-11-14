@@ -524,11 +524,186 @@ body {
     display: none;
     min-height: 80px;
     align-items: center;
+    transition: all 0.3s ease;
 }
 
 .bottom-player.visible {
     display: flex;
     flex-direction: column;
+}
+
+/* Player States */
+.bottom-player.player-normal {
+    /* Normal state - default */
+}
+
+.bottom-player.player-minimized {
+    min-height: 50px;
+    padding: 0.4rem 1rem;
+}
+
+.bottom-player.player-minimized .player-content {
+    gap: 0.5rem;
+}
+
+.bottom-player.player-minimized .player-station-info {
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+.bottom-player.player-minimized .player-logo {
+    width: 35px;
+    height: 35px;
+}
+
+.bottom-player.player-minimized .player-info {
+    display: none;
+}
+
+.bottom-player.player-minimized .player-spectrum-wrapper {
+    flex: 1;
+    min-width: 150px;
+    max-width: 100%;
+    height: 40px;
+}
+
+.bottom-player.player-minimized .player-controls {
+    flex: 0 0 auto;
+    gap: 0.5rem;
+}
+
+.bottom-player.player-minimized .player-btn {
+    width: 32px;
+    height: 32px;
+}
+
+.bottom-player.player-minimized .play-pause-btn {
+    width: 36px;
+    height: 36px;
+}
+
+.bottom-player.player-fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    height: 100vh;
+    min-height: 100vh;
+    padding: 3rem;
+    z-index: 1000;
+    background: linear-gradient(135deg, var(--background) 0%, #1a1f3a 100%);
+    border: none;
+    box-shadow: none;
+}
+
+.bottom-player.player-fullscreen .player-content {
+    flex-direction: column;
+    gap: 3rem;
+    max-width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+}
+
+.bottom-player.player-fullscreen .player-station-info {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 2rem;
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 600px;
+}
+
+.bottom-player.player-fullscreen .player-logo {
+    width: 180px;
+    height: 180px;
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.bottom-player.player-fullscreen .player-info {
+    align-items: center;
+    text-align: center;
+    width: 100%;
+}
+
+.bottom-player.player-fullscreen .player-station-name {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+    text-align: center;
+    color: var(--text-primary);
+}
+
+.bottom-player.player-fullscreen .player-station-group {
+    font-size: 1.5rem;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.bottom-player.player-fullscreen .player-spectrum-wrapper {
+    flex: 1;
+    width: 100%;
+    max-width: 1200px;
+    height: 60%;
+    min-height: 400px;
+    max-height: 600px;
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    border: 2px solid rgba(99, 102, 241, 0.3);
+}
+
+.bottom-player.player-fullscreen .player-controls {
+    flex: 0 0 auto;
+    gap: 2rem;
+    margin-top: 2rem;
+    width: 100%;
+    max-width: 600px;
+    justify-content: center;
+}
+
+.bottom-player.player-fullscreen .player-btn {
+    width: 70px;
+    height: 70px;
+    border-width: 3px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.bottom-player.player-fullscreen .player-btn svg {
+    width: 32px;
+    height: 32px;
+}
+
+.bottom-player.player-fullscreen .play-pause-btn {
+    width: 90px;
+    height: 90px;
+    box-shadow: 0 6px 24px rgba(99, 102, 241, 0.4);
+}
+
+.bottom-player.player-fullscreen .play-pause-btn svg {
+    width: 40px;
+    height: 40px;
+}
+
+.bottom-player.player-fullscreen .volume-control {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-width: 200px;
+}
+
+.bottom-player.player-fullscreen .volume-slider {
+    width: 150px;
+    height: 8px;
+}
+
+.bottom-player.player-fullscreen .volume-btn {
+    width: 56px;
+    height: 56px;
 }
 
 .player-content {
@@ -562,6 +737,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: all 0.3s ease;
 }
 
 .player-spectrum-canvas {
@@ -570,6 +746,8 @@ body {
     display: block;
     min-width: 200px;
     min-height: 60px;
+    cursor: pointer;
+    user-select: none;
 }
 
 .player-logo {
@@ -1179,6 +1357,72 @@ body {
     
     .offline-content p {
         font-size: 0.9rem;
+    }
+    
+    .bottom-player.player-fullscreen {
+        padding: 1.5rem;
+    }
+    
+    .bottom-player.player-fullscreen .player-content {
+        gap: 2rem;
+        padding: 1rem;
+    }
+    
+    .bottom-player.player-fullscreen .player-station-info {
+        gap: 1.5rem;
+        max-width: 100%;
+    }
+    
+    .bottom-player.player-fullscreen .player-logo {
+        width: 120px;
+        height: 120px;
+    }
+    
+    .bottom-player.player-fullscreen .player-station-name {
+        font-size: 1.75rem;
+    }
+    
+    .bottom-player.player-fullscreen .player-station-group {
+        font-size: 1.1rem;
+    }
+    
+    .bottom-player.player-fullscreen .player-spectrum-wrapper {
+        min-height: 250px;
+        max-height: 400px;
+        height: 50%;
+    }
+    
+    .bottom-player.player-fullscreen .player-controls {
+        gap: 1.5rem;
+        margin-top: 1.5rem;
+    }
+    
+    .bottom-player.player-fullscreen .player-btn {
+        width: 56px;
+        height: 56px;
+    }
+    
+    .bottom-player.player-fullscreen .player-btn svg {
+        width: 24px;
+        height: 24px;
+    }
+    
+    .bottom-player.player-fullscreen .play-pause-btn {
+        width: 72px;
+        height: 72px;
+    }
+    
+    .bottom-player.player-fullscreen .play-pause-btn svg {
+        width: 32px;
+        height: 32px;
+    }
+    
+    .bottom-player.player-fullscreen .volume-control {
+        min-width: 150px;
+    }
+    
+    .bottom-player.player-fullscreen .volume-slider {
+        width: 100px;
     }
 }
 
