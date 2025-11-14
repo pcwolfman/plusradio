@@ -29,12 +29,14 @@ class RadioApp {
         this.spectrumCanvas = document.getElementById('spectrumCanvas');
         this.spectrumStationName = document.getElementById('spectrumStationName');
         this.spectrumFrequency = document.getElementById('spectrumFrequency');
+        this.playerSpectrumCanvas = document.getElementById('playerSpectrumCanvas');
         
         // Web Audio API for spectrum analysis
         this.audioContext = null;
         this.analyser = null;
         this.dataArray = null;
         this.spectrumAnimationId = null;
+        this.playerSpectrumAnimationId = null;
         
         this.init();
     }
@@ -267,7 +269,7 @@ class RadioApp {
     }
     
     initSpectrum() {
-        // Initialize canvas
+        // Initialize fullscreen spectrum canvas
         const canvas = this.spectrumCanvas;
         const container = this.spectrumContainer;
         
@@ -278,6 +280,21 @@ class RadioApp {
         
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
+        
+        // Initialize player spectrum canvas
+        const playerCanvas = this.playerSpectrumCanvas;
+        if (playerCanvas) {
+            const resizePlayerCanvas = () => {
+                const wrapper = playerCanvas.parentElement;
+                if (wrapper) {
+                    playerCanvas.width = wrapper.clientWidth;
+                    playerCanvas.height = wrapper.clientHeight || 60;
+                }
+            };
+            
+            resizePlayerCanvas();
+            window.addEventListener('resize', resizePlayerCanvas);
+        }
         
         // Initialize Web Audio API when audio starts playing
     }
@@ -305,8 +322,9 @@ class RadioApp {
                     this.analyser.connect(this.audioContext.destination);
                 }
                 
-                // Start spectrum animation
+                // Start spectrum animations
                 this.startSpectrumAnimation();
+                this.startPlayerSpectrumAnimation();
             } catch (error) {
                 console.warn('Web Audio API not supported or CORS issue:', error);
                 // Hide spectrum if not supported
@@ -319,9 +337,12 @@ class RadioApp {
             if (this.audioContext.state === 'suspended') {
                 this.audioContext.resume();
             }
-            // Start animation if not already running
+            // Start animations if not already running
             if (!this.spectrumAnimationId) {
                 this.startSpectrumAnimation();
+            }
+            if (!this.playerSpectrumAnimationId) {
+                this.startPlayerSpectrumAnimation();
             }
         }
     }
@@ -368,30 +389,34 @@ class RadioApp {
                     maxFreqIndex = i;
                 }
                 
-                // Calculate hue based on frequency (lower = red, higher = blue)
-                const hue = 240 - (i / barCount) * 180; // Blue to red spectrum
-                const saturation = 100;
-                const lightness = 50 + (dataValue / 255) * 20;
+                // Each bar gets a unique color from rainbow spectrum
+                const hue = (i / barCount) * 360; // Full rainbow spectrum (0-360)
+                const saturation = 90 + (dataValue / 255) * 10; // 90-100%
+                const lightness = 45 + (dataValue / 255) * 25; // 45-70%
                 
-                // Create gradient for each bar
+                // Create vibrant gradient for each bar with unique colors
                 const barGradient = ctx.createLinearGradient(x, height, x, height - barHeight);
-                barGradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness}%, 0.8)`);
-                barGradient.addColorStop(0.5, `hsla(${hue + 20}, ${saturation}%, ${lightness + 10}%, 0.9)`);
-                barGradient.addColorStop(1, `hsla(${hue + 40}, ${saturation}%, ${lightness + 20}%, 1)`);
+                const hue1 = hue;
+                const hue2 = (hue + 30) % 360;
+                const hue3 = (hue + 60) % 360;
                 
-                // Draw main bar
+                barGradient.addColorStop(0, `hsla(${hue1}, ${saturation}%, ${lightness}%, 0.9)`);
+                barGradient.addColorStop(0.5, `hsla(${hue2}, ${saturation}%, ${lightness + 10}%, 1)`);
+                barGradient.addColorStop(1, `hsla(${hue3}, ${saturation}%, ${lightness + 20}%, 1)`);
+                
+                // Draw main bar with unique color
                 ctx.fillStyle = barGradient;
                 ctx.fillRect(x, height - barHeight, barWidth - 2, barHeight);
                 
-                // Add glow effect
-                ctx.shadowBlur = 20;
-                ctx.shadowColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                // Add vibrant glow effect with unique color
+                ctx.shadowBlur = 25;
+                ctx.shadowColor = `hsl(${hue}, ${saturation}%, ${lightness + 10}%)`;
                 ctx.fillRect(x, height - barHeight, barWidth - 2, barHeight);
                 ctx.shadowBlur = 0;
                 
-                // Add peak indicator (small circle on top)
+                // Add peak indicator with unique color
                 if (dataValue > 200) {
-                    ctx.fillStyle = `hsl(${hue + 40}, ${saturation}%, 80%)`;
+                    ctx.fillStyle = `hsl(${hue3}, ${saturation}%, 85%)`;
                     ctx.beginPath();
                     ctx.arc(x + barWidth / 2 - 1, height - barHeight - 3, 3, 0, Math.PI * 2);
                     ctx.fill();
@@ -400,15 +425,20 @@ class RadioApp {
                 x += barWidth;
             }
             
-            // Draw mirror effect (bottom reflection)
-            ctx.globalAlpha = 0.3;
+            // Draw mirror effect (bottom reflection) with unique colors
+            ctx.globalAlpha = 0.4;
             for (let i = 0; i < barCount; i++) {
-                const barHeight = (this.dataArray[i] / 255) * height * 0.3;
+                const dataValue = this.dataArray[i];
+                const barHeight = (dataValue / 255) * height * 0.35;
                 const barX = (width / barCount * 2.5) * i;
-                const barW = width / barCount * 2.5 - 1;
+                const barW = width / barCount * 2.5 - 2;
                 
+                // Each reflection bar gets unique color matching the main bar
                 const hue = (i / barCount) * 360;
-                ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+                const saturation = 85 + (dataValue / 255) * 15;
+                const lightness = 40 + (dataValue / 255) * 20;
+                
+                ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
                 ctx.fillRect(barX, height, barW, barHeight);
             }
             ctx.globalAlpha = 1;
@@ -433,10 +463,90 @@ class RadioApp {
             this.spectrumAnimationId = null;
         }
         
-        // Clear canvas
+        if (this.playerSpectrumAnimationId) {
+            cancelAnimationFrame(this.playerSpectrumAnimationId);
+            this.playerSpectrumAnimationId = null;
+        }
+        
+        // Clear canvases
         const canvas = this.spectrumCanvas;
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        const playerCanvas = this.playerSpectrumCanvas;
+        if (playerCanvas) {
+            const ctx = playerCanvas.getContext('2d');
+            ctx.clearRect(0, 0, playerCanvas.width, playerCanvas.height);
+        }
+    }
+    
+    startPlayerSpectrumAnimation() {
+        if (this.playerSpectrumAnimationId) {
+            cancelAnimationFrame(this.playerSpectrumAnimationId);
+        }
+        
+        const canvas = this.playerSpectrumCanvas;
+        if (!canvas || !this.analyser) return;
+        
         const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        const draw = () => {
+            if (!this.analyser || !this.isPlaying) {
+                this.playerSpectrumAnimationId = null;
+                return;
+            }
+            
+            this.analyser.getByteFrequencyData(this.dataArray);
+            
+            // Clear canvas with dark background
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+            ctx.fillRect(0, 0, width, height);
+            
+            const barCount = this.dataArray.length;
+            const barWidth = width / barCount * 2.5;
+            let x = 0;
+            
+            // Draw compact spectrum bars with unique colors
+            for (let i = 0; i < barCount; i++) {
+                const dataValue = this.dataArray[i];
+                const barHeight = (dataValue / 255) * height * 0.9;
+                
+                // Each bar gets unique color from rainbow spectrum
+                const hue = (i / barCount) * 360;
+                const saturation = 90 + (dataValue / 255) * 10;
+                const lightness = 45 + (dataValue / 255) * 25;
+                
+                // Create gradient for each bar
+                const barGradient = ctx.createLinearGradient(x, height, x, height - barHeight);
+                const hue1 = hue;
+                const hue2 = (hue + 30) % 360;
+                const hue3 = (hue + 60) % 360;
+                
+                barGradient.addColorStop(0, `hsla(${hue1}, ${saturation}%, ${lightness}%, 0.9)`);
+                barGradient.addColorStop(0.5, `hsla(${hue2}, ${saturation}%, ${lightness + 10}%, 1)`);
+                barGradient.addColorStop(1, `hsla(${hue3}, ${saturation}%, ${lightness + 20}%, 1)`);
+                
+                // Draw bar
+                ctx.fillStyle = barGradient;
+                ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+                
+                // Add glow effect
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = `hsl(${hue}, ${saturation}%, ${lightness + 10}%)`;
+                ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+                ctx.shadowBlur = 0;
+                
+                x += barWidth;
+            }
+            
+            this.playerSpectrumAnimationId = requestAnimationFrame(draw);
+        };
+        
+        draw();
     }
 
     setupEventListeners() {
