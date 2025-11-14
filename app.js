@@ -286,14 +286,30 @@ class RadioApp {
         if (playerCanvas) {
             const resizePlayerCanvas = () => {
                 const wrapper = playerCanvas.parentElement;
-                if (wrapper) {
+                if (wrapper && wrapper.clientWidth > 0) {
                     playerCanvas.width = wrapper.clientWidth;
                     playerCanvas.height = wrapper.clientHeight || 60;
+                } else {
+                    // Fallback if wrapper not ready
+                    playerCanvas.width = 300;
+                    playerCanvas.height = 60;
                 }
             };
             
-            resizePlayerCanvas();
+            // Wait for DOM to be ready
+            setTimeout(() => {
+                resizePlayerCanvas();
+            }, 100);
+            
             window.addEventListener('resize', resizePlayerCanvas);
+            
+            // Also resize when bottom player becomes visible
+            const observer = new MutationObserver(() => {
+                if (this.bottomPlayer.classList.contains('visible')) {
+                    setTimeout(resizePlayerCanvas, 50);
+                }
+            });
+            observer.observe(this.bottomPlayer, { attributes: true, attributeFilter: ['class'] });
         }
         
         // Initialize Web Audio API when audio starts playing
@@ -488,16 +504,47 @@ class RadioApp {
         }
         
         const canvas = this.playerSpectrumCanvas;
-        if (!canvas || !this.analyser) return;
+        if (!canvas) {
+            console.warn('Player spectrum canvas not found');
+            return;
+        }
+        
+        if (!this.analyser) {
+            console.warn('Analyser not ready for player spectrum');
+            return;
+        }
+        
+        // Ensure canvas has proper dimensions
+        const wrapper = canvas.parentElement;
+        let width, height;
+        
+        if (wrapper && wrapper.clientWidth > 0 && wrapper.clientHeight > 0) {
+            width = wrapper.clientWidth;
+            height = wrapper.clientHeight;
+        } else {
+            // Use CSS computed dimensions or defaults
+            const computedStyle = window.getComputedStyle(wrapper || canvas);
+            width = parseInt(computedStyle.width) || 300;
+            height = parseInt(computedStyle.height) || 60;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
         
         const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
         
         const draw = () => {
             if (!this.analyser || !this.isPlaying) {
                 this.playerSpectrumAnimationId = null;
                 return;
+            }
+            
+            // Update dimensions if needed
+            if (wrapper && (canvas.width !== wrapper.clientWidth || canvas.height !== wrapper.clientHeight)) {
+                width = wrapper.clientWidth || 300;
+                height = wrapper.clientHeight || 60;
+                canvas.width = width;
+                canvas.height = height;
             }
             
             this.analyser.getByteFrequencyData(this.dataArray);
@@ -929,6 +976,17 @@ class RadioApp {
         
         // Show bottom player
         this.bottomPlayer.classList.add('visible');
+        
+        // Resize player spectrum canvas when player becomes visible
+        if (this.playerSpectrumCanvas) {
+            setTimeout(() => {
+                const wrapper = this.playerSpectrumCanvas.parentElement;
+                if (wrapper) {
+                    this.playerSpectrumCanvas.width = wrapper.clientWidth || 300;
+                    this.playerSpectrumCanvas.height = wrapper.clientHeight || 60;
+                }
+            }, 100);
+        }
         
         // Update bottom player UI
         document.getElementById('stationName').textContent = station.name;
