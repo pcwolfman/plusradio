@@ -33,7 +33,60 @@ class RadioApp {
         this.dataArray = null;
         this.playerSpectrumAnimationId = null;
         
+        this.appContainer = document.getElementById('appContainer');
+        this.offlineMessage = document.getElementById('offlineMessage');
+        
+        // Check online status and setup listeners
+        this.checkOnlineStatus();
+        this.setupOnlineListeners();
+        
         this.init();
+    }
+    
+    checkOnlineStatus() {
+        if (!navigator.onLine) {
+            this.showOfflineMessage();
+        } else {
+            this.hideOfflineMessage();
+        }
+    }
+    
+    setupOnlineListeners() {
+        window.addEventListener('online', () => {
+            this.hideOfflineMessage();
+            // Reload M3U file when coming back online
+            if (this.parser && this.parser.stations.length === 0) {
+                this.init();
+            }
+        });
+        
+        window.addEventListener('offline', () => {
+            this.showOfflineMessage();
+            // Stop playing if offline
+            if (this.isPlaying) {
+                this.audio.pause();
+                this.isPlaying = false;
+                this.updatePlayButton();
+            }
+        });
+    }
+    
+    showOfflineMessage() {
+        if (this.appContainer) {
+            this.appContainer.style.display = 'none';
+        }
+        if (this.offlineMessage) {
+            this.offlineMessage.style.display = 'flex';
+        }
+    }
+    
+    hideOfflineMessage() {
+        if (this.appContainer) {
+            this.appContainer.style.display = 'flex';
+        }
+        if (this.offlineMessage) {
+            this.offlineMessage.style.display = 'none';
+        }
     }
     
     loadViewMode() {
@@ -240,6 +293,12 @@ class RadioApp {
     }
 
     async init() {
+        // Check if offline before trying to load
+        if (!navigator.onLine) {
+            this.showOfflineMessage();
+            return;
+        }
+        
         try {
             // Load M3U file
             const response = await fetch('Radyo.m3u');
@@ -259,7 +318,12 @@ class RadioApp {
             
         } catch (error) {
             console.error('Hata:', error);
-            this.showError(error.message);
+            // If it's a network error and we're offline, show offline message
+            if (!navigator.onLine || error.message.includes('Failed to fetch')) {
+                this.showOfflineMessage();
+            } else {
+                this.showError(error.message);
+            }
         }
     }
     

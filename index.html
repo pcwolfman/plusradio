@@ -8,7 +8,18 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="app-container">
+    <!-- Offline Message -->
+    <div class="offline-message" id="offlineMessage" style="display: none;">
+        <div class="offline-content">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.58 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"></path>
+            </svg>
+            <h2>İnternet Bağlantısı Yok</h2>
+            <p>Lütfen İnternete Bağlandıktan Sonra Tekrar Deneyiniz.</p>
+        </div>
+    </div>
+
+    <div class="app-container" id="appContainer">
         <!-- Search Bar -->
         <div class="search-bar">
             <button class="list-toggle-btn" id="listToggleBtn" title="Liste görünümü">
