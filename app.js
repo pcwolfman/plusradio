@@ -25,17 +25,12 @@ class RadioApp {
         this.bottomPlayer = document.getElementById('bottomPlayer');
         this.playerFavoriteBtn = document.getElementById('playerFavoriteBtn');
         this.listToggleBtn = document.getElementById('listToggleBtn');
-        this.spectrumContainer = document.getElementById('spectrumContainer');
-        this.spectrumCanvas = document.getElementById('spectrumCanvas');
-        this.spectrumStationName = document.getElementById('spectrumStationName');
-        this.spectrumFrequency = document.getElementById('spectrumFrequency');
         this.playerSpectrumCanvas = document.getElementById('playerSpectrumCanvas');
         
         // Web Audio API for spectrum analysis
         this.audioContext = null;
         this.analyser = null;
         this.dataArray = null;
-        this.spectrumAnimationId = null;
         this.playerSpectrumAnimationId = null;
         
         this.init();
@@ -269,18 +264,6 @@ class RadioApp {
     }
     
     initSpectrum() {
-        // Initialize fullscreen spectrum canvas
-        const canvas = this.spectrumCanvas;
-        const container = this.spectrumContainer;
-        
-        const resizeCanvas = () => {
-            canvas.width = container.clientWidth;
-            canvas.height = container.clientHeight;
-        };
-        
-        resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
-        
         // Initialize player spectrum canvas
         const playerCanvas = this.playerSpectrumCanvas;
         if (playerCanvas) {
@@ -338,159 +321,30 @@ class RadioApp {
                     this.analyser.connect(this.audioContext.destination);
                 }
                 
-                // Start spectrum animations
-                this.startSpectrumAnimation();
+                // Start player spectrum animation
                 this.startPlayerSpectrumAnimation();
             } catch (error) {
                 console.warn('Web Audio API not supported or CORS issue:', error);
-                // Hide spectrum if not supported
-                if (this.spectrumContainer) {
-                    this.spectrumContainer.classList.remove('visible');
-                }
             }
         } else {
             // Resume audio context if suspended (required by some browsers)
             if (this.audioContext.state === 'suspended') {
                 this.audioContext.resume();
             }
-            // Start animations if not already running
-            if (!this.spectrumAnimationId) {
-                this.startSpectrumAnimation();
-            }
+            // Start animation if not already running
             if (!this.playerSpectrumAnimationId) {
                 this.startPlayerSpectrumAnimation();
             }
         }
     }
     
-    startSpectrumAnimation() {
-        if (this.spectrumAnimationId) {
-            cancelAnimationFrame(this.spectrumAnimationId);
-        }
-        
-        const canvas = this.spectrumCanvas;
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
-        
-        const draw = () => {
-            if (!this.analyser || !this.isPlaying) {
-                this.spectrumAnimationId = null;
-                return;
-            }
-            
-            this.analyser.getByteFrequencyData(this.dataArray);
-            
-            // Clear canvas with gradient background
-            const gradient = ctx.createLinearGradient(0, 0, 0, height);
-            gradient.addColorStop(0, 'rgba(15, 23, 42, 0.95)');
-            gradient.addColorStop(1, 'rgba(30, 41, 59, 0.95)');
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, width, height);
-            
-            const barCount = this.dataArray.length;
-            const barWidth = width / barCount * 2.5;
-            let x = 0;
-            let maxFreq = 0;
-            let maxFreqIndex = 0;
-            
-            // Draw spectrum bars with smooth animation
-            for (let i = 0; i < barCount; i++) {
-                const dataValue = this.dataArray[i];
-                const barHeight = (dataValue / 255) * height * 0.85;
-                
-                // Find peak frequency
-                if (dataValue > maxFreq) {
-                    maxFreq = dataValue;
-                    maxFreqIndex = i;
-                }
-                
-                // Each bar gets a unique color from rainbow spectrum
-                const hue = (i / barCount) * 360; // Full rainbow spectrum (0-360)
-                const saturation = 90 + (dataValue / 255) * 10; // 90-100%
-                const lightness = 45 + (dataValue / 255) * 25; // 45-70%
-                
-                // Create vibrant gradient for each bar with unique colors
-                const barGradient = ctx.createLinearGradient(x, height, x, height - barHeight);
-                const hue1 = hue;
-                const hue2 = (hue + 30) % 360;
-                const hue3 = (hue + 60) % 360;
-                
-                barGradient.addColorStop(0, `hsla(${hue1}, ${saturation}%, ${lightness}%, 0.9)`);
-                barGradient.addColorStop(0.5, `hsla(${hue2}, ${saturation}%, ${lightness + 10}%, 1)`);
-                barGradient.addColorStop(1, `hsla(${hue3}, ${saturation}%, ${lightness + 20}%, 1)`);
-                
-                // Draw main bar with unique color
-                ctx.fillStyle = barGradient;
-                ctx.fillRect(x, height - barHeight, barWidth - 2, barHeight);
-                
-                // Add vibrant glow effect with unique color
-                ctx.shadowBlur = 25;
-                ctx.shadowColor = `hsl(${hue}, ${saturation}%, ${lightness + 10}%)`;
-                ctx.fillRect(x, height - barHeight, barWidth - 2, barHeight);
-                ctx.shadowBlur = 0;
-                
-                // Add peak indicator with unique color
-                if (dataValue > 200) {
-                    ctx.fillStyle = `hsl(${hue3}, ${saturation}%, 85%)`;
-                    ctx.beginPath();
-                    ctx.arc(x + barWidth / 2 - 1, height - barHeight - 3, 3, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                
-                x += barWidth;
-            }
-            
-            // Draw mirror effect (bottom reflection) with unique colors
-            ctx.globalAlpha = 0.4;
-            for (let i = 0; i < barCount; i++) {
-                const dataValue = this.dataArray[i];
-                const barHeight = (dataValue / 255) * height * 0.35;
-                const barX = (width / barCount * 2.5) * i;
-                const barW = width / barCount * 2.5 - 2;
-                
-                // Each reflection bar gets unique color matching the main bar
-                const hue = (i / barCount) * 360;
-                const saturation = 85 + (dataValue / 255) * 15;
-                const lightness = 40 + (dataValue / 255) * 20;
-                
-                ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-                ctx.fillRect(barX, height, barW, barHeight);
-            }
-            ctx.globalAlpha = 1;
-            
-            // Update frequency display
-            if (maxFreq > 0) {
-                const sampleRate = this.audioContext.sampleRate;
-                const nyquist = sampleRate / 2;
-                const frequency = (maxFreqIndex / barCount) * nyquist;
-                this.spectrumFrequency.textContent = `${Math.round(frequency)} Hz`;
-            }
-            
-            this.spectrumAnimationId = requestAnimationFrame(draw);
-        };
-        
-        draw();
-    }
-    
     stopSpectrumAnimation() {
-        if (this.spectrumAnimationId) {
-            cancelAnimationFrame(this.spectrumAnimationId);
-            this.spectrumAnimationId = null;
-        }
-        
         if (this.playerSpectrumAnimationId) {
             cancelAnimationFrame(this.playerSpectrumAnimationId);
             this.playerSpectrumAnimationId = null;
         }
         
-        // Clear canvases
-        const canvas = this.spectrumCanvas;
-        if (canvas) {
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-        
+        // Clear player canvas
         const playerCanvas = this.playerSpectrumCanvas;
         if (playerCanvas) {
             const ctx = playerCanvas.getContext('2d');
@@ -629,7 +483,6 @@ class RadioApp {
             this.updatePlayButton();
             this.hideLoadingState();
             this.setupAudioContext();
-            this.spectrumContainer.classList.add('visible');
         });
 
         this.audio.addEventListener('pause', () => {
@@ -704,15 +557,6 @@ class RadioApp {
             });
         }
 
-        // Spectrum container click to close
-        if (this.spectrumContainer) {
-            this.spectrumContainer.addEventListener('click', (e) => {
-                // Only close if clicking on the container itself, not on info overlay
-                if (e.target === this.spectrumContainer || e.target === this.spectrumCanvas) {
-                    this.spectrumContainer.classList.remove('visible');
-                }
-            });
-        }
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
@@ -1000,11 +844,6 @@ class RadioApp {
             logoUrl = this.generatePlaceholderUrl(station.name);
         }
         logoImg.src = logoUrl;
-        
-        // Update spectrum display
-        if (this.spectrumStationName) {
-            this.spectrumStationName.textContent = station.name;
-        }
         logoImg.setAttribute('referrerpolicy', 'no-referrer');
         logoImg.setAttribute('crossorigin', 'anonymous');
         logoImg.onerror = function() {
