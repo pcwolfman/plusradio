@@ -26,6 +26,7 @@ class RadioApp {
         this.playerFavoriteBtn = document.getElementById('playerFavoriteBtn');
         this.listToggleBtn = document.getElementById('listToggleBtn');
         this.playerSpectrumCanvas = document.getElementById('playerSpectrumCanvas');
+        this.spectrumStyleToggle = document.getElementById('spectrumStyleToggle');
         
         // Web Audio API for spectrum analysis
         this.audioContext = null;
@@ -40,6 +41,7 @@ class RadioApp {
         this.playerState = 'normal';
         this.lastTapTime = 0;
         this.tapTimeout = null;
+        this.spectrumStyle = this.loadSpectrumStyle(); // 'style1', 'style2', or 'style3'
         
         // Check online status and setup listeners
         this.checkOnlineStatus();
@@ -105,6 +107,87 @@ class RadioApp {
     
     saveViewMode() {
         localStorage.setItem('plusRadio_viewMode', this.viewMode);
+    }
+    
+    loadSpectrumStyle() {
+        try {
+            const stored = localStorage.getItem('plusRadio_spectrumStyle');
+            return stored || 'style1'; // 'style1', 'style2', or 'style3'
+        } catch (e) {
+            return 'style1';
+        }
+    }
+    
+    saveSpectrumStyle() {
+        localStorage.setItem('plusRadio_spectrumStyle', this.spectrumStyle);
+    }
+    
+    toggleSpectrumStyle() {
+        console.log('toggleSpectrumStyle called, current:', this.spectrumStyle);
+        // Cycle through: style1 -> style2 -> style3 -> style1
+        if (this.spectrumStyle === 'style1') {
+            this.spectrumStyle = 'style2';
+        } else if (this.spectrumStyle === 'style2') {
+            this.spectrumStyle = 'style3';
+        } else {
+            this.spectrumStyle = 'style1';
+        }
+        console.log('toggleSpectrumStyle new style:', this.spectrumStyle);
+        this.saveSpectrumStyle();
+        this.updateSpectrumTooltip();
+        
+        // Stop current animation
+        if (this.playerSpectrumAnimationId) {
+            cancelAnimationFrame(this.playerSpectrumAnimationId);
+            this.playerSpectrumAnimationId = null;
+        }
+        
+        // Clear canvas
+        if (this.playerSpectrumCanvas) {
+            const ctx = this.playerSpectrumCanvas.getContext('2d');
+            ctx.clearRect(0, 0, this.playerSpectrumCanvas.width, this.playerSpectrumCanvas.height);
+        }
+        
+        // Restart animation with new style (if analyser is ready)
+        if (this.analyser) {
+            setTimeout(() => {
+                this.startPlayerSpectrumAnimation();
+            }, 50);
+        } else {
+            console.log('Analyser not ready, will restart when audio starts');
+        }
+    }
+    
+    updateSpectrumTooltip() {
+        if (this.spectrumStyleToggle) {
+            let styleName = 'Gökkuşağı';
+            if (this.spectrumStyle === 'style2') {
+                styleName = 'Rengarenk';
+            } else if (this.spectrumStyle === 'style3') {
+                styleName = 'Dairesel';
+            }
+            this.spectrumStyleToggle.title = `Spektrum Stili: ${styleName} (Tıkla ile değiştir)`;
+            
+            // Update icon based on style
+            let iconSvg = '';
+            if (this.spectrumStyle === 'style1') {
+                iconSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
+                   </svg>`;
+            } else if (this.spectrumStyle === 'style2') {
+                iconSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
+                   </svg>`;
+            } else {
+                iconSvg = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path>
+                   </svg>`;
+            }
+            this.spectrumStyleToggle.innerHTML = iconSvg;
+        }
     }
     
     toggleViewMode() {
@@ -340,6 +423,14 @@ class RadioApp {
             return;
         }
         
+        // Ensure spectrum style toggle button exists
+        if (!this.spectrumStyleToggle) {
+            this.spectrumStyleToggle = document.getElementById('spectrumStyleToggle');
+        }
+        
+        // Set initial tooltip
+        this.updateSpectrumTooltip();
+        
         const resizePlayerCanvas = () => {
             try {
                 const wrapper = playerCanvas.parentElement;
@@ -556,40 +647,265 @@ class RadioApp {
             ctx.fillRect(0, 0, width, height);
             
             const barCount = this.dataArray.length;
-            const barWidth = width / barCount * 2.5;
-            let x = 0;
             
-            // Draw compact spectrum bars with unique colors
-            for (let i = 0; i < barCount; i++) {
-                const dataValue = this.dataArray[i];
-                const barHeight = (dataValue / 255) * height * 0.9;
+            if (this.spectrumStyle === 'style1') {
+                // Style 1: Original rainbow gradient bars (bottom-up)
+                const barWidth = width / barCount * 2.5;
+                let x = 0;
                 
-                // Each bar gets unique color from rainbow spectrum
-                const hue = (i / barCount) * 360;
-                const saturation = 90 + (dataValue / 255) * 10;
-                const lightness = 45 + (dataValue / 255) * 25;
+                for (let i = 0; i < barCount; i++) {
+                    const dataValue = this.dataArray[i];
+                    const barHeight = (dataValue / 255) * height * 0.9;
+                    
+                    // Each bar gets unique color from rainbow spectrum
+                    const hue = (i / barCount) * 360;
+                    const saturation = 90 + (dataValue / 255) * 10;
+                    const lightness = 45 + (dataValue / 255) * 25;
+                    
+                    // Create gradient for each bar
+                    const barGradient = ctx.createLinearGradient(x, height, x, height - barHeight);
+                    const hue1 = hue;
+                    const hue2 = (hue + 30) % 360;
+                    const hue3 = (hue + 60) % 360;
+                    
+                    barGradient.addColorStop(0, `hsla(${hue1}, ${saturation}%, ${lightness}%, 0.9)`);
+                    barGradient.addColorStop(0.5, `hsla(${hue2}, ${saturation}%, ${lightness + 10}%, 1)`);
+                    barGradient.addColorStop(1, `hsla(${hue3}, ${saturation}%, ${lightness + 20}%, 1)`);
+                    
+                    // Draw bar
+                    ctx.fillStyle = barGradient;
+                    ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+                    
+                    // Add glow effect
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = `hsl(${hue}, ${saturation}%, ${lightness + 10}%)`;
+                    ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+                    ctx.shadowBlur = 0;
+                    
+                    x += barWidth;
+                }
+            } else if (this.spectrumStyle === 'style2') {
+                // Style 2: Vibrant colorful bars from center (mirrored up and down)
+                const barWidth = width / barCount * 2.5;
+                const centerY = height / 2;
+                let x = 0;
                 
-                // Create gradient for each bar
-                const barGradient = ctx.createLinearGradient(x, height, x, height - barHeight);
-                const hue1 = hue;
-                const hue2 = (hue + 30) % 360;
-                const hue3 = (hue + 60) % 360;
+                // Color palette - vibrant rainbow colors
+                const colors = [
+                    { h: 0, s: 100, l: 50 },    // Red
+                    { h: 30, s: 100, l: 50 },   // Orange
+                    { h: 60, s: 100, l: 50 },   // Yellow
+                    { h: 120, s: 100, l: 50 },  // Green
+                    { h: 180, s: 100, l: 50 },  // Cyan
+                    { h: 240, s: 100, l: 50 },  // Blue
+                    { h: 270, s: 100, l: 50 },  // Purple
+                    { h: 300, s: 100, l: 50 },  // Magenta
+                    { h: 330, s: 100, l: 50 },  // Pink
+                    { h: 15, s: 100, l: 50 },   // Red-Orange
+                ];
                 
-                barGradient.addColorStop(0, `hsla(${hue1}, ${saturation}%, ${lightness}%, 0.9)`);
-                barGradient.addColorStop(0.5, `hsla(${hue2}, ${saturation}%, ${lightness + 10}%, 1)`);
-                barGradient.addColorStop(1, `hsla(${hue3}, ${saturation}%, ${lightness + 20}%, 1)`);
+                for (let i = 0; i < barCount; i++) {
+                    const dataValue = this.dataArray[i];
+                    const barHeight = (dataValue / 255) * height * 0.45; // Slightly taller for better visibility
+                    
+                    // Each bar gets a unique vibrant color from the palette
+                    const colorIndex = i % colors.length;
+                    const baseColor = colors[colorIndex];
+                    
+                    // Dynamic saturation and lightness based on audio data
+                    const saturation = 90 + (dataValue / 255) * 10;
+                    const lightness = 40 + (dataValue / 255) * 30;
+                    
+                    // Create vibrant linear gradient for each bar
+                    const centerX = x + barWidth / 2;
+                    const barGradient = ctx.createLinearGradient(
+                        centerX, centerY - barHeight,
+                        centerX, centerY + barHeight
+                    );
+                    
+                    // Gradient with multiple color stops for vibrant effect
+                    const hue1 = baseColor.h;
+                    const hue2 = (baseColor.h + 20) % 360;
+                    const hue3 = (baseColor.h + 40) % 360;
+                    
+                    barGradient.addColorStop(0, `hsla(${hue1}, ${saturation}%, ${lightness + 20}%, 1)`);
+                    barGradient.addColorStop(0.3, `hsla(${hue2}, ${saturation}%, ${lightness + 10}%, 1)`);
+                    barGradient.addColorStop(0.5, `hsla(${hue1}, ${saturation}%, ${lightness}%, 1)`);
+                    barGradient.addColorStop(0.7, `hsla(${hue3}, ${saturation}%, ${lightness + 10}%, 1)`);
+                    barGradient.addColorStop(1, `hsla(${hue1}, ${saturation}%, ${lightness + 20}%, 1)`);
+                    
+                    // Draw mirrored bars (top and bottom from center)
+                    ctx.fillStyle = barGradient;
+                    
+                    // Top bar (going up from center)
+                    ctx.fillRect(x, centerY - barHeight, barWidth - 1, barHeight);
+                    
+                    // Bottom bar (going down from center)
+                    ctx.fillRect(x, centerY, barWidth - 1, barHeight);
+                    
+                    // Add vibrant glow effect with matching color
+                    ctx.shadowBlur = 25;
+                    ctx.shadowColor = `hsl(${hue1}, ${saturation}%, ${lightness + 15}%)`;
+                    ctx.fillRect(x, centerY - barHeight, barWidth - 1, barHeight);
+                    ctx.fillRect(x, centerY, barWidth - 1, barHeight);
+                    ctx.shadowBlur = 0;
+                    
+                    // Add bright connecting line in center
+                    ctx.strokeStyle = `hsla(${hue1}, ${saturation}%, ${lightness + 25}%, 0.8)`;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY - barHeight);
+                    ctx.lineTo(centerX, centerY + barHeight);
+                    ctx.stroke();
+                    
+                    // Add highlight on top of each bar
+                    ctx.fillStyle = `hsla(${hue1}, ${saturation}%, ${lightness + 30}%, 0.6)`;
+                    ctx.fillRect(x, centerY - barHeight, barWidth - 1, Math.max(2, barHeight * 0.1));
+                    ctx.fillRect(x, centerY, barWidth - 1, Math.max(2, barHeight * 0.1));
+                    
+                    x += barWidth;
+                }
+            } else if (this.spectrumStyle === 'style3') {
+                // Style 3: Modern circular spectrum with sleek design
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const baseRadius = Math.min(width, height) * 0.25;
+                const maxBarLength = Math.min(width, height) * 0.2;
                 
-                // Draw bar
-                ctx.fillStyle = barGradient;
-                ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+                // Draw modern bars - both inward and outward
+                for (let i = 0; i < barCount; i++) {
+                    const dataValue = this.dataArray[i];
+                    const angle = (i / barCount) * Math.PI * 2 - Math.PI / 2;
+                    
+                    // Smooth bar length with easing
+                    const normalizedValue = dataValue / 255;
+                    const currentBarLength = normalizedValue * maxBarLength;
+                    
+                    if (currentBarLength < 0.5) continue;
+                    
+                    // Modern color scheme - vibrant but elegant
+                    const hue = (i / barCount) * 360;
+                    const saturation = 75 + normalizedValue * 20;
+                    const lightness = 55 + normalizedValue * 20;
+                    
+                    // Calculate positions for bidirectional bars
+                    const innerStartX = centerX + Math.cos(angle) * (baseRadius - currentBarLength * 0.3);
+                    const innerStartY = centerY + Math.sin(angle) * (baseRadius - currentBarLength * 0.3);
+                    const outerEndX = centerX + Math.cos(angle) * (baseRadius + currentBarLength);
+                    const outerEndY = centerY + Math.sin(angle) * (baseRadius + currentBarLength);
+                    
+                    // Draw outer bar (extending outward)
+                    const outerGradient = ctx.createLinearGradient(
+                        centerX + Math.cos(angle) * baseRadius,
+                        centerY + Math.sin(angle) * baseRadius,
+                        outerEndX, outerEndY
+                    );
+                    outerGradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness}%, 0.8)`);
+                    outerGradient.addColorStop(0.5, `hsla(${hue}, ${saturation}%, ${lightness + 15}%, 1)`);
+                    outerGradient.addColorStop(1, `hsla(${hue}, ${saturation}%, ${lightness + 25}%, 0.9)`);
+                    
+                    ctx.strokeStyle = outerGradient;
+                    ctx.lineWidth = 2.5;
+                    ctx.lineCap = 'round';
+                    ctx.shadowBlur = 12;
+                    ctx.shadowColor = `hsla(${hue}, ${saturation}%, ${lightness + 10}%, 0.8)`;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(centerX + Math.cos(angle) * baseRadius, centerY + Math.sin(angle) * baseRadius);
+                    ctx.lineTo(outerEndX, outerEndY);
+                    ctx.stroke();
+                    
+                    // Draw inner bar (extending inward) - shorter and more subtle
+                    if (normalizedValue > 0.3) {
+                        const innerLength = currentBarLength * 0.4;
+                        const innerEndX = centerX + Math.cos(angle) * (baseRadius - innerLength);
+                        const innerEndY = centerY + Math.sin(angle) * (baseRadius - innerLength);
+                        
+                        const innerGradient = ctx.createLinearGradient(
+                            centerX + Math.cos(angle) * baseRadius,
+                            centerY + Math.sin(angle) * baseRadius,
+                            innerEndX, innerEndY
+                        );
+                        innerGradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness}%, 0.6)`);
+                        innerGradient.addColorStop(1, `hsla(${hue}, ${saturation}%, ${lightness - 10}%, 0.4)`);
+                        
+                        ctx.strokeStyle = innerGradient;
+                        ctx.lineWidth = 1.5;
+                        ctx.shadowBlur = 6;
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(centerX + Math.cos(angle) * baseRadius, centerY + Math.sin(angle) * baseRadius);
+                        ctx.lineTo(innerEndX, innerEndY);
+                        ctx.stroke();
+                    }
+                    
+                    ctx.shadowBlur = 0;
+                    
+                    // Modern particle effects - smooth trails
+                    if (dataValue > 60) {
+                        const trailCount = Math.min(8, Math.floor(dataValue / 30));
+                        for (let t = 0; t < trailCount; t++) {
+                            const trailProgress = (t / trailCount) * 0.7;
+                            const trailX = outerEndX - (outerEndX - centerX) * trailProgress;
+                            const trailY = outerEndY - (outerEndY - centerY) * trailProgress;
+                            
+                            const trailSize = 1.5 + normalizedValue * 2;
+                            const trailAlpha = (0.7 - trailProgress) * normalizedValue;
+                            
+                            ctx.fillStyle = `hsla(${hue}, ${saturation}%, ${lightness + 20}%, ${trailAlpha})`;
+                            ctx.shadowBlur = 6;
+                            ctx.shadowColor = `hsla(${hue}, ${saturation}%, ${lightness + 15}%, 0.6)`;
+                            
+                            ctx.beginPath();
+                            ctx.arc(trailX, trailY, trailSize, 0, Math.PI * 2);
+                            ctx.fill();
+                            
+                            ctx.shadowBlur = 0;
+                        }
+                    }
+                }
                 
-                // Add glow effect
+                // Modern center design - multi-layered with smooth pulse
+                const maxData = Math.max(...Array.from(this.dataArray));
+                const pulseIntensity = (maxData / 255);
+                
+                // Outer glow ring
+                const ringRadius = baseRadius * 0.6 + pulseIntensity * 8;
+                const ringGradient = ctx.createRadialGradient(centerX, centerY, ringRadius - 3, centerX, centerY, ringRadius + 3);
+                ringGradient.addColorStop(0, `hsla(200, 80%, 60%, ${0.3 + pulseIntensity * 0.3})`);
+                ringGradient.addColorStop(1, `hsla(250, 80%, 50%, 0)`);
+                
+                ctx.strokeStyle = ringGradient;
+                ctx.lineWidth = 2;
                 ctx.shadowBlur = 15;
-                ctx.shadowColor = `hsl(${hue}, ${saturation}%, ${lightness + 10}%)`;
-                ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+                ctx.shadowColor = 'hsla(200, 80%, 60%, 0.6)';
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, ringRadius, 0, Math.PI * 2);
+                ctx.stroke();
                 ctx.shadowBlur = 0;
                 
-                x += barWidth;
+                // Center core - modern gradient
+                const coreRadius = 6 + pulseIntensity * 12;
+                const coreGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, coreRadius);
+                coreGradient.addColorStop(0, `hsla(200, 100%, 70%, ${0.9 + pulseIntensity * 0.1})`);
+                coreGradient.addColorStop(0.4, `hsla(240, 100%, 60%, ${0.7 + pulseIntensity * 0.2})`);
+                coreGradient.addColorStop(0.7, `hsla(280, 90%, 55%, ${0.4 + pulseIntensity * 0.2})`);
+                coreGradient.addColorStop(1, `hsla(300, 80%, 50%, 0)`);
+                
+                ctx.fillStyle = coreGradient;
+                ctx.shadowBlur = 25;
+                ctx.shadowColor = 'hsla(200, 100%, 70%, 0.9)';
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, coreRadius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Inner highlight
+                ctx.fillStyle = `hsla(200, 100%, 85%, ${0.6 + pulseIntensity * 0.3})`;
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, coreRadius * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
             }
             
             this.playerSpectrumAnimationId = requestAnimationFrame(draw);
@@ -707,14 +1023,81 @@ class RadioApp {
 
         // Spectrum canvas tap controls
         if (this.playerSpectrumCanvas) {
-            this.playerSpectrumCanvas.addEventListener('click', (e) => {
-                this.handleSpectrumTap(e);
-            });
+            const spectrumWrapper = this.playerSpectrumCanvas.parentElement;
+            if (spectrumWrapper) {
+                spectrumWrapper.addEventListener('click', (e) => {
+                    this.handleSpectrumTap(e);
+                });
+            }
         }
+        
+        // Spectrum style toggle button - multiple approaches to ensure it works
+        const setupSpectrumToggle = () => {
+            const toggleBtn = document.getElementById('spectrumStyleToggle');
+            if (toggleBtn) {
+                console.log('Spectrum style toggle button found!', toggleBtn);
+                this.spectrumStyleToggle = toggleBtn;
+                
+                // Method 1: Direct click listener
+                const handleClick = (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    console.log('=== SPECTRUM TOGGLE CLICKED ===');
+                    this.toggleSpectrumStyle();
+                    return false;
+                };
+                
+                toggleBtn.onclick = handleClick;
+                toggleBtn.addEventListener('click', handleClick, true); // Use capture phase
+                toggleBtn.addEventListener('click', handleClick, false);
+                
+                // Also handle SVG clicks
+                const svg = toggleBtn.querySelector('svg');
+                if (svg) {
+                    svg.style.pointerEvents = 'none'; // Let clicks pass through to button
+                }
+                
+                // Method 2: Event delegation on player-controls
+                const playerControls = toggleBtn.closest('.player-controls');
+                if (playerControls && !playerControls.hasAttribute('data-spectrum-delegation')) {
+                    playerControls.setAttribute('data-spectrum-delegation', 'true');
+                    playerControls.addEventListener('click', (e) => {
+                        if (e.target.closest('#spectrumStyleToggle') || e.target.id === 'spectrumStyleToggle') {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            console.log('=== SPECTRUM TOGGLE CLICKED (delegation) ===');
+                            this.toggleSpectrumStyle();
+                        }
+                    }, true);
+                }
+            } else {
+                console.warn('Spectrum style toggle button NOT found!');
+            }
+        };
+        
+        // Try multiple times
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                setupSpectrumToggle();
+                setTimeout(setupSpectrumToggle, 100);
+            });
+        } else {
+            setupSpectrumToggle();
+        }
+        
+        setTimeout(setupSpectrumToggle, 500);
+        setTimeout(setupSpectrumToggle, 1000);
         
         // Bottom player tap controls (butonlar hariç)
         if (this.bottomPlayer) {
             this.bottomPlayer.addEventListener('click', (e) => {
+                // Spectrum style toggle butonunu önce kontrol et
+                if (e.target.id === 'spectrumStyleToggle' || 
+                    e.target.closest('#spectrumStyleToggle') ||
+                    e.target.closest('.spectrum-style-toggle')) {
+                    return; // Let the button handle its own click
+                }
+                
                 // Butonlara, inputlara veya kontrollere tıklanmışsa işlem yapma
                 if (e.target.closest('.player-btn') || 
                     e.target.closest('.player-controls') ||
@@ -798,6 +1181,8 @@ class RadioApp {
         // Resize spectrum canvas when state changes
         setTimeout(() => {
             this.resizeSpectrumCanvas();
+            // Update tooltip icon size for fullscreen
+            this.updateSpectrumTooltip();
         }, 100);
     }
     
