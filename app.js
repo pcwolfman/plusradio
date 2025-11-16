@@ -650,39 +650,39 @@ class RadioApp {
             
             if (this.spectrumStyle === 'style1') {
                 // Style 1: Original rainbow gradient bars (bottom-up)
-                const barWidth = width / barCount * 2.5;
-                let x = 0;
+            const barWidth = width / barCount * 2.5;
+            let x = 0;
+            
+            for (let i = 0; i < barCount; i++) {
+                const dataValue = this.dataArray[i];
+                const barHeight = (dataValue / 255) * height * 0.9;
                 
-                for (let i = 0; i < barCount; i++) {
-                    const dataValue = this.dataArray[i];
-                    const barHeight = (dataValue / 255) * height * 0.9;
-                    
-                    // Each bar gets unique color from rainbow spectrum
-                    const hue = (i / barCount) * 360;
-                    const saturation = 90 + (dataValue / 255) * 10;
-                    const lightness = 45 + (dataValue / 255) * 25;
-                    
-                    // Create gradient for each bar
-                    const barGradient = ctx.createLinearGradient(x, height, x, height - barHeight);
-                    const hue1 = hue;
-                    const hue2 = (hue + 30) % 360;
-                    const hue3 = (hue + 60) % 360;
-                    
-                    barGradient.addColorStop(0, `hsla(${hue1}, ${saturation}%, ${lightness}%, 0.9)`);
-                    barGradient.addColorStop(0.5, `hsla(${hue2}, ${saturation}%, ${lightness + 10}%, 1)`);
-                    barGradient.addColorStop(1, `hsla(${hue3}, ${saturation}%, ${lightness + 20}%, 1)`);
-                    
-                    // Draw bar
-                    ctx.fillStyle = barGradient;
-                    ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
-                    
-                    // Add glow effect
-                    ctx.shadowBlur = 15;
-                    ctx.shadowColor = `hsl(${hue}, ${saturation}%, ${lightness + 10}%)`;
-                    ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
-                    ctx.shadowBlur = 0;
-                    
-                    x += barWidth;
+                // Each bar gets unique color from rainbow spectrum
+                const hue = (i / barCount) * 360;
+                const saturation = 90 + (dataValue / 255) * 10;
+                const lightness = 45 + (dataValue / 255) * 25;
+                
+                // Create gradient for each bar
+                const barGradient = ctx.createLinearGradient(x, height, x, height - barHeight);
+                const hue1 = hue;
+                const hue2 = (hue + 30) % 360;
+                const hue3 = (hue + 60) % 360;
+                
+                barGradient.addColorStop(0, `hsla(${hue1}, ${saturation}%, ${lightness}%, 0.9)`);
+                barGradient.addColorStop(0.5, `hsla(${hue2}, ${saturation}%, ${lightness + 10}%, 1)`);
+                barGradient.addColorStop(1, `hsla(${hue3}, ${saturation}%, ${lightness + 20}%, 1)`);
+                
+                // Draw bar
+                ctx.fillStyle = barGradient;
+                ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+                
+                // Add glow effect
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = `hsl(${hue}, ${saturation}%, ${lightness + 10}%)`;
+                ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+                ctx.shadowBlur = 0;
+                
+                x += barWidth;
                 }
             } else if (this.spectrumStyle === 'style2') {
                 // Style 2: Vibrant colorful bars from center (mirrored up and down)
@@ -1026,9 +1026,9 @@ class RadioApp {
             const spectrumWrapper = this.playerSpectrumCanvas.parentElement;
             if (spectrumWrapper) {
                 spectrumWrapper.addEventListener('click', (e) => {
-                    this.handleSpectrumTap(e);
-                });
-            }
+                this.handleSpectrumTap(e);
+            });
+        }
         }
         
         // Spectrum style toggle button - multiple approaches to ensure it works
@@ -1330,11 +1330,31 @@ class RadioApp {
             
             // Fix logo URL - convert http to https if needed
             let logoUrl = station.logo || '';
-            if (logoUrl && logoUrl.startsWith('http://')) {
-                logoUrl = logoUrl.replace('http://', 'https://');
+            let useProxy = false;
+            
+            // Clean and validate logo URL
+            if (logoUrl) {
+                logoUrl = String(logoUrl).trim();
+                // Convert http to https
+                if (logoUrl.startsWith('http://')) {
+                    logoUrl = logoUrl.replace('http://', 'https://');
+                }
+                // Ensure it's a valid URL
+                if (!logoUrl.startsWith('http://') && !logoUrl.startsWith('https://') && !logoUrl.startsWith('data:')) {
+                    logoUrl = '';
+                } else if (logoUrl.startsWith('https://') || logoUrl.startsWith('http://')) {
+                    // Mark that we should use proxy
+                    useProxy = true;
+                }
             }
-            if (!logoUrl || logoUrl === '') {
+            
+            // Only use placeholder if logo is truly empty
+            if (!logoUrl || logoUrl === '' || logoUrl === 'undefined' || logoUrl === 'null') {
                 logoUrl = this.generatePlaceholderUrl(station.name);
+                useProxy = false;
+            } else if (useProxy) {
+                // Use proxy for the logo URL
+                logoUrl = this.getProxiedLogoUrl(logoUrl);
             }
             
             // Different HTML structure based on view mode
@@ -1395,14 +1415,37 @@ class RadioApp {
                 `;
             }
 
-            // Logo error handler
+            // Logo error handler with proxy fallback
             const logoImg = item.querySelector('.channel-logo');
-            logoImg.addEventListener('error', function() {
-                const stationName = this.getAttribute('data-station-name');
-                if (stationName) {
-                    this.src = window.radioApp.generatePlaceholderUrl(stationName);
-                }
-            });
+            if (logoImg && useProxy && station.logo) {
+                const originalLogoUrl = station.logo;
+                const stationName = station.name;
+                const proxies = [
+                    `https://corsproxy.io/?${encodeURIComponent(originalLogoUrl)}`,
+                    `https://api.allorigins.win/raw?url=${encodeURIComponent(originalLogoUrl)}`,
+                    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalLogoUrl)}`
+                ];
+                
+                let proxyIndex = 0;
+                logoImg.addEventListener('error', function() {
+                    proxyIndex++;
+                    if (proxyIndex < proxies.length) {
+                        // Try next proxy
+                        this.src = proxies[proxyIndex];
+                    } else {
+                        // All proxies failed, use placeholder
+                        this.src = window.radioApp.generatePlaceholderUrl(stationName);
+                    }
+                });
+            } else if (logoImg) {
+                // Non-proxy logo error handler
+                logoImg.addEventListener('error', function() {
+                    const stationName = this.getAttribute('data-station-name');
+                    if (stationName && !this.src.includes('data:image/svg+xml')) {
+                        this.src = window.radioApp.generatePlaceholderUrl(stationName);
+                    }
+                });
+            }
 
             // Favorite button handler
             const favBtn = item.querySelector('.favorite-star');
@@ -1493,18 +1536,63 @@ class RadioApp {
         document.getElementById('stationGroup').textContent = station.group || '-';
         const logoImg = document.getElementById('stationLogo');
         let logoUrl = station.logo || '';
-        if (logoUrl && logoUrl.startsWith('http://')) {
-            logoUrl = logoUrl.replace('http://', 'https://');
+        let useProxy = false;
+        
+        // Clean and validate logo URL
+        if (logoUrl) {
+            logoUrl = logoUrl.trim();
+            // Convert http to https
+            if (logoUrl.startsWith('http://')) {
+                logoUrl = logoUrl.replace('http://', 'https://');
+            }
+            // Ensure it's a valid URL
+            if (!logoUrl.startsWith('http://') && !logoUrl.startsWith('https://') && !logoUrl.startsWith('data:')) {
+                logoUrl = '';
+            } else if (logoUrl.startsWith('https://') || logoUrl.startsWith('http://')) {
+                useProxy = true;
+            }
         }
-        if (!logoUrl || logoUrl === '') {
+        
+        // Only use placeholder if logo is truly empty
+        if (!logoUrl || logoUrl === '' || logoUrl === 'undefined' || logoUrl === 'null') {
             logoUrl = this.generatePlaceholderUrl(station.name);
+            useProxy = false;
+        } else if (useProxy) {
+            // Use proxy for the logo URL
+            logoUrl = this.getProxiedLogoUrl(logoUrl);
         }
+        
         logoImg.src = logoUrl;
         logoImg.setAttribute('referrerpolicy', 'no-referrer');
         logoImg.setAttribute('crossorigin', 'anonymous');
-        logoImg.onerror = function() {
-            this.src = window.radioApp.generatePlaceholderUrl(station.name);
-        };
+        
+        // Error handler with proxy fallback
+        if (useProxy && station.logo) {
+            const originalLogoUrl = station.logo;
+            const proxies = [
+                `https://corsproxy.io/?${encodeURIComponent(originalLogoUrl)}`,
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(originalLogoUrl)}`,
+                `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalLogoUrl)}`
+            ];
+            
+            let proxyIndex = 0;
+            logoImg.onerror = function() {
+                proxyIndex++;
+                if (proxyIndex < proxies.length) {
+                    // Try next proxy
+                    this.src = proxies[proxyIndex];
+                } else {
+                    // All proxies failed, use placeholder
+                    this.src = window.radioApp.generatePlaceholderUrl(station.name);
+                }
+            };
+        } else {
+            logoImg.onerror = function() {
+                if (!this.src.includes('data:image/svg+xml')) {
+                    this.src = window.radioApp.generatePlaceholderUrl(station.name);
+                }
+            };
+        }
 
         // Update playing state on channel items
         document.querySelectorAll('.channel-item').forEach(item => {
@@ -1696,6 +1784,39 @@ class RadioApp {
 
     showError(message) {
         alert(message); // Can be replaced with a better UI component
+    }
+    
+    getProxiedLogoUrl(originalUrl) {
+        // Use CORS proxy to bypass CORS issues for images
+        // corsproxy.io works best for images
+        return `https://corsproxy.io/?${encodeURIComponent(originalUrl)}`;
+    }
+    
+    async loadLogoWithProxy(logoUrl, imgElement, stationName) {
+        // Try to load logo through proxy with fallback
+        const proxies = [
+            `https://corsproxy.io/?${encodeURIComponent(logoUrl)}`,
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(logoUrl)}`,
+            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(logoUrl)}`
+        ];
+        
+        // Try first proxy
+        imgElement.src = proxies[0];
+        
+        // If fails, try next proxy
+        imgElement.onerror = function() {
+            if (this.dataset.proxyIndex === undefined) {
+                this.dataset.proxyIndex = '0';
+            }
+            const currentIndex = parseInt(this.dataset.proxyIndex);
+            if (currentIndex < proxies.length - 1) {
+                this.dataset.proxyIndex = (currentIndex + 1).toString();
+                this.src = proxies[currentIndex + 1];
+            } else {
+                // All proxies failed, use placeholder
+                this.src = window.radioApp.generatePlaceholderUrl(stationName);
+            }
+        };
     }
     
     generatePlaceholderUrl(text) {

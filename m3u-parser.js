@@ -35,7 +35,7 @@ class M3UParser {
                 
                 currentStation = {
                     name: info.name || 'Unknown Station',
-                    logo: info.logo || 'https://via.placeholder.com/200?text=Radio',
+                    logo: info.logo || '', // Don't use placeholder here, let app.js handle it
                     group: info.group || 'Genel',
                     url: ''
                 };
@@ -58,7 +58,7 @@ class M3UParser {
         }
 
         // Sort categories - prioritize common ones
-        const categoryOrder = ['Pop', 'Rock', 'Türkü', 'Arabesk', 'Haber', 'Spor', 'Jazz', 'Klasik', 'Rap', 'Hip Hop'];
+        const categoryOrder = ['Pop', 'Rock', 'Türkü', 'Türk Halk Müziği', 'Türk Sanat Müziği', 'Arabesk', 'Slow', 'Haber', 'Spor', 'Jazz', 'Klasik', 'Rap', 'Dini', 'Nostalji', 'Yabancı', 'Çocuk', 'Genel'];
         const sortedCategories = Array.from(this.categories).sort((a, b) => {
             const indexA = categoryOrder.indexOf(a);
             const indexB = categoryOrder.indexOf(b);
@@ -84,19 +84,44 @@ class M3UParser {
             group: ''
         };
 
-        // Extract attributes
-        const attrMatch = line.match(/([^=]+)="([^"]+)"/g);
-        if (attrMatch) {
-            attrMatch.forEach(attr => {
-                const [key, value] = attr.split('=');
-                const cleanValue = value.replace(/"/g, '');
-                
-                if (key.includes('logo')) {
-                    result.logo = cleanValue;
-                } else if (key.includes('group-title')) {
-                    result.group = cleanValue;
-                }
-            });
+        // Extract attributes - improved regex to handle tvg-logo properly
+        // First try: direct regex for tvg-logo (most reliable)
+        const logoMatch = line.match(/tvg-logo=["']([^"']+)["']/);
+        if (logoMatch && logoMatch[1]) {
+            result.logo = logoMatch[1].trim();
+        }
+        
+        // Extract group-title - but ignore generic ones like "canliradyodinle.fm"
+        const groupMatch = line.match(/group-title=["']([^"']+)["']/);
+        if (groupMatch && groupMatch[1]) {
+            const groupTitle = groupMatch[1].trim();
+            // Ignore generic group titles
+            if (groupTitle && 
+                groupTitle !== 'canliradyodinle.fm' && 
+                !groupTitle.includes('RADYO KANALLARI') &&
+                groupTitle.length > 2) {
+                result.group = groupTitle;
+            }
+        }
+        
+        // Fallback: try generic attribute matching
+        if (!result.logo) {
+            const attrMatch = line.match(/([^=]+)="([^"]+)"/g);
+            if (attrMatch) {
+                attrMatch.forEach(attr => {
+                    const parts = attr.split('=');
+                    if (parts.length === 2) {
+                        const key = parts[0].trim();
+                        const value = parts[1].replace(/^["']|["']$/g, '').trim();
+                        
+                        if (key.includes('logo') || key === 'tvg-logo') {
+                            result.logo = value;
+                        } else if (key.includes('group-title') || key === 'group-title') {
+                            result.group = value;
+                        }
+                    }
+                });
+            }
         }
 
         // Extract station name (last part after comma)
@@ -117,8 +142,10 @@ class M3UParser {
                 result.name = fullName.replace(/\s*\|\s*.+$/, '').trim();
             } else {
                 result.name = fullName;
-                // Extract category from station name keywords
-                result.group = this.extractCategoryFromName(fullName);
+                // Only extract category from name if group-title was not set or was generic
+                if (!result.group || result.group === 'canliradyodinle.fm' || result.group === 'Genel') {
+                    result.group = this.extractCategoryFromName(fullName);
+                }
             }
             
             // Clean up name
@@ -136,51 +163,69 @@ class M3UParser {
     extractCategoryFromName(name) {
         const lowerName = name.toLowerCase();
         
-        // Category keywords mapping
-        const categoryMap = {
-            'pop': 'Pop',
-            'rock': 'Rock',
-            'türkü': 'Türkü',
-            'turkü': 'Türkü',
-            'arabesk': 'Arabesk',
-            'haber': 'Haber',
-            'spor': 'Spor',
-            'jazz': 'Jazz',
-            'klasik': 'Klasik',
-            'rap': 'Rap',
-            'hip hop': 'Hip Hop',
-            'hiphop': 'Hip Hop',
-            'türk sanat': 'Türk Sanat Müziği',
-            'tsm': 'Türk Sanat Müziği',
-            'türk halk': 'Türk Halk Müziği',
-            'thm': 'Türk Halk Müziği',
-            'slow': 'Slow',
-            'dini': 'Dini',
-            'çocuk': 'Çocuk',
-            'nostalji': 'Nostalji',
-            'remix': 'Remix',
-            'türkçe': 'Türkçe Pop',
-            'foreign': 'Yabancı',
-            'yabancı': 'Yabancı',
-            'english': 'Yabancı',
-            'ingilizce': 'Yabancı'
-        };
+        // Priority-based category keywords mapping (order matters - more specific first)
+        const categoryChecks = [
+            // Haber & Spor (check first as they're very specific)
+            { keywords: ['habertürk', 'haber turk', 'ntv radyo', 'cnn türk', 'trt haber', 'trt spor', 'a haber', 'show radyo', 'show tv'], category: 'Haber' },
+            { keywords: ['spor', 'beşiktaş', 'galatasaray', 'fenerbahçe', 'trabzonspor', 'süper lig'], category: 'Spor' },
+            
+            // Türk Sanat Müziği
+            { keywords: ['türk sanat', 'tsm', 'sanat müziği', 'klasik türk', 'türk klasik'], category: 'Türk Sanat Müziği' },
+            
+            // Türk Halk Müziği
+            { keywords: ['türk halk', 'thm', 'halk müziği', 'türkü', 'turkü', 'folk'], category: 'Türk Halk Müziği' },
+            
+            // Arabesk
+            { keywords: ['arabesk', 'arabesk fm', 'arabesk radyo'], category: 'Arabesk' },
+            
+            // Slow
+            { keywords: ['slow', 'slow fm', 'slow radyo', 'romantik', 'romantic'], category: 'Slow' },
+            
+            // Dini/İslami
+            { keywords: ['dini', 'islami', 'islam', 'kuran', 'kur\'an', 'mevlid', 'ilahi', 'tasavvuf'], category: 'Dini' },
+            
+            // Rock & Rap
+            { keywords: ['rock', 'rock fm', 'rock radyo'], category: 'Rock' },
+            { keywords: ['rap', 'hip hop', 'hiphop', 'rap fm'], category: 'Rap' },
+            
+            // Jazz & Klasik
+            { keywords: ['jazz', 'jazz fm', 'caz'], category: 'Jazz' },
+            { keywords: ['klasik', 'classical', 'klasik müzik', 'classical music'], category: 'Klasik' },
+            
+            // Nostalji
+            { keywords: ['nostalji', 'nostalgia', 'eski', 'retro'], category: 'Nostalji' },
+            
+            // Çocuk
+            { keywords: ['çocuk', 'cocuk', 'kids', 'children'], category: 'Çocuk' },
+            
+            // Yabancı Müzik
+            { keywords: ['yabancı', 'yabanci', 'foreign', 'english', 'ingilizce', 'international', 'world music'], category: 'Yabancı' },
+            
+            // Pop (check last as it's most common)
+            { keywords: ['türkçe pop', 'turkce pop', 'pop', 'fm', 'radyo'], category: 'Pop' }
+        ];
         
-        // Check for category keywords in name
-        for (const [keyword, category] of Object.entries(categoryMap)) {
-            if (lowerName.includes(keyword)) {
-                return category;
+        // Check each category in priority order
+        for (const check of categoryChecks) {
+            for (const keyword of check.keywords) {
+                if (lowerName.includes(keyword)) {
+                    return check.category;
+                }
             }
         }
         
-        // Check if it's a news/info station
+        // Check for news/info stations
         if (lowerName.includes('haber') || lowerName.includes('news') || 
-            lowerName.includes('info') || lowerName.includes('info')) {
+            lowerName.includes('info') || lowerName.includes('gazete')) {
             return 'Haber';
         }
         
-        // Default category
-        return 'Pop';
+        // Default category - try to infer from common patterns
+        if (lowerName.includes('fm') || lowerName.includes('radyo')) {
+            return 'Pop'; // Most Turkish radio stations are pop
+        }
+        
+        return 'Genel';
     }
 
     /**
