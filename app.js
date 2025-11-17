@@ -1358,11 +1358,17 @@ class RadioApp {
             }
             
             // Different HTML structure based on view mode
+            // Optimize logo loading with decode="async" and fetchpriority
+            const isVisible = item.offsetParent !== null;
+            const fetchPriority = (this.currentStation && this.currentStation.name === station.name) ? 'high' : 'low';
+            
             if (this.viewMode === 'compact') {
                 // Compact view: küçük kutucuklar, sadece logo ve isim
                 item.innerHTML = `
                     <img src="${logoUrl}" alt="${station.name}" class="channel-logo" 
                          loading="lazy"
+                         decoding="async"
+                         fetchpriority="${fetchPriority}"
                          referrerpolicy="no-referrer"
                          crossorigin="anonymous"
                          data-station-name="${station.name.replace(/"/g, '&quot;')}">
@@ -1381,6 +1387,8 @@ class RadioApp {
                     <div class="channel-logo-wrapper">
                         <img src="${logoUrl}" alt="${station.name}" class="channel-logo" 
                              loading="lazy"
+                             decoding="async"
+                             fetchpriority="${fetchPriority}"
                              referrerpolicy="no-referrer"
                              crossorigin="anonymous"
                              data-station-name="${station.name.replace(/"/g, '&quot;')}">
@@ -1400,6 +1408,8 @@ class RadioApp {
                 item.innerHTML = `
                     <img src="${logoUrl}" alt="${station.name}" class="channel-logo" 
                          loading="lazy"
+                         decoding="async"
+                         fetchpriority="${fetchPriority}"
                          referrerpolicy="no-referrer"
                          crossorigin="anonymous"
                          data-station-name="${station.name.replace(/"/g, '&quot;')}">
@@ -1415,36 +1425,59 @@ class RadioApp {
                 `;
             }
 
-            // Logo error handler with proxy fallback
+            // Logo error handler with proxy fallback and timeout
             const logoImg = item.querySelector('.channel-logo');
-            if (logoImg && useProxy && station.logo) {
-                const originalLogoUrl = station.logo;
+            if (logoImg) {
                 const stationName = station.name;
-                const proxies = [
-                    `https://corsproxy.io/?${encodeURIComponent(originalLogoUrl)}`,
-                    `https://api.allorigins.win/raw?url=${encodeURIComponent(originalLogoUrl)}`,
-                    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalLogoUrl)}`
-                ];
+                let loadTimeout = null;
                 
-                let proxyIndex = 0;
-                logoImg.addEventListener('error', function() {
-                    proxyIndex++;
-                    if (proxyIndex < proxies.length) {
-                        // Try next proxy
-                        this.src = proxies[proxyIndex];
-                    } else {
-                        // All proxies failed, use placeholder
-                        this.src = window.radioApp.generatePlaceholderUrl(stationName);
+                // Set timeout for logo loading (3 seconds)
+                loadTimeout = setTimeout(() => {
+                    if (!logoImg.complete || logoImg.naturalWidth === 0) {
+                        // Logo didn't load in time, use placeholder
+                        logoImg.src = this.generatePlaceholderUrl(stationName);
                     }
-                });
-            } else if (logoImg) {
-                // Non-proxy logo error handler
-                logoImg.addEventListener('error', function() {
-                    const stationName = this.getAttribute('data-station-name');
-                    if (stationName && !this.src.includes('data:image/svg+xml')) {
-                        this.src = window.radioApp.generatePlaceholderUrl(stationName);
-                    }
-                });
+                }, 3000);
+                
+                // Clear timeout when image loads successfully
+                logoImg.addEventListener('load', () => {
+                    if (loadTimeout) clearTimeout(loadTimeout);
+                    logoImg.style.opacity = '1';
+                }, { once: true });
+                
+                if (useProxy && station.logo) {
+                    const originalLogoUrl = station.logo;
+                    const proxies = [
+                        `https://corsproxy.io/?${encodeURIComponent(originalLogoUrl)}`,
+                        `https://api.allorigins.win/raw?url=${encodeURIComponent(originalLogoUrl)}`,
+                        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalLogoUrl)}`
+                    ];
+                    
+                    let proxyIndex = 0;
+                    logoImg.addEventListener('error', function() {
+                        if (loadTimeout) clearTimeout(loadTimeout);
+                        proxyIndex++;
+                        if (proxyIndex < proxies.length) {
+                            // Try next proxy
+                            this.src = proxies[proxyIndex];
+                            loadTimeout = setTimeout(() => {
+                                this.src = window.radioApp.generatePlaceholderUrl(stationName);
+                            }, 2000);
+                        } else {
+                            // All proxies failed, use placeholder
+                            this.src = window.radioApp.generatePlaceholderUrl(stationName);
+                        }
+                    }, { once: false });
+                } else {
+                    // Non-proxy logo error handler
+                    logoImg.addEventListener('error', function() {
+                        if (loadTimeout) clearTimeout(loadTimeout);
+                        const stationName = this.getAttribute('data-station-name');
+                        if (stationName && !this.src.includes('data:image/svg+xml')) {
+                            this.src = window.radioApp.generatePlaceholderUrl(stationName);
+                        }
+                    }, { once: true });
+                }
             }
 
             // Favorite button handler
@@ -1562,9 +1595,26 @@ class RadioApp {
             logoUrl = this.getProxiedLogoUrl(logoUrl);
         }
         
+        // Optimize player logo loading
         logoImg.src = logoUrl;
         logoImg.setAttribute('referrerpolicy', 'no-referrer');
         logoImg.setAttribute('crossorigin', 'anonymous');
+        logoImg.setAttribute('decoding', 'async');
+        logoImg.setAttribute('fetchpriority', 'high');
+        logoImg.setAttribute('loading', 'eager'); // Player logo should load immediately
+        
+        // Set timeout for player logo loading (2 seconds - faster for player)
+        let playerLogoTimeout = setTimeout(() => {
+            if (!logoImg.complete || logoImg.naturalWidth === 0) {
+                logoImg.src = this.generatePlaceholderUrl(station.name);
+            }
+        }, 2000);
+        
+        // Clear timeout when image loads successfully
+        logoImg.addEventListener('load', () => {
+            if (playerLogoTimeout) clearTimeout(playerLogoTimeout);
+            logoImg.style.opacity = '1';
+        }, { once: true });
         
         // Error handler with proxy fallback
         if (useProxy && station.logo) {
@@ -1577,10 +1627,14 @@ class RadioApp {
             
             let proxyIndex = 0;
             logoImg.onerror = function() {
+                if (playerLogoTimeout) clearTimeout(playerLogoTimeout);
                 proxyIndex++;
                 if (proxyIndex < proxies.length) {
                     // Try next proxy
                     this.src = proxies[proxyIndex];
+                    playerLogoTimeout = setTimeout(() => {
+                        this.src = window.radioApp.generatePlaceholderUrl(station.name);
+                    }, 1500);
                 } else {
                     // All proxies failed, use placeholder
                     this.src = window.radioApp.generatePlaceholderUrl(station.name);
@@ -1588,6 +1642,7 @@ class RadioApp {
             };
         } else {
             logoImg.onerror = function() {
+                if (playerLogoTimeout) clearTimeout(playerLogoTimeout);
                 if (!this.src.includes('data:image/svg+xml')) {
                     this.src = window.radioApp.generatePlaceholderUrl(station.name);
                 }

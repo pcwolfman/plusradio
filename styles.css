@@ -447,7 +447,34 @@ body {
     border-radius: 8px;
     object-fit: cover;
     flex-shrink: 0;
-    background: var(--background);
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    image-rendering: optimize-quality;
+    will-change: contents;
+    content-visibility: auto;
+    /* Placeholder while loading */
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+    background-size: 200% 200%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    transition: opacity 0.2s ease;
+}
+
+@keyframes shimmer {
+    0%, 100% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+}
+
+.channel-logo:not([src]), .channel-logo[src=""], .channel-logo[src="undefined"] {
+    opacity: 0.5;
+}
+
+.channel-logo[src]:not([src=""]):not([src="undefined"]) {
+    opacity: 1;
+    animation: none;
 }
 
 .channel-info {
@@ -760,8 +787,18 @@ body {
     border-radius: 8px;
     object-fit: cover;
     flex-shrink: 0;
-    background: var(--background);
     cursor: pointer;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    image-rendering: optimize-quality;
+    will-change: contents;
+    /* Placeholder while loading */
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+    background-size: 200% 200%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    transition: opacity 0.2s ease;
+    /* High priority for player logo */
+    fetchpriority: high;
 }
 
 .player-info {
