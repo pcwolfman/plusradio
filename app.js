@@ -219,6 +219,15 @@ class RadioApp {
             const scalePercent = (1 / this.zoomLevel) * 100;
             this.appContainer.style.width = `${scalePercent}%`;
         }
+        
+        // Apply zoom to player as well
+        if (this.bottomPlayer) {
+            this.bottomPlayer.style.transform = `scale(${this.zoomLevel})`;
+            this.bottomPlayer.style.transformOrigin = 'bottom left';
+            // Adjust player width to match zoom level
+            const playerScalePercent = (1 / this.zoomLevel) * 100;
+            this.bottomPlayer.style.width = `${playerScalePercent}%`;
+        }
     }
     
     toggleZoom() {
@@ -1520,35 +1529,35 @@ class RadioApp {
                 
                 if (useProxy && station.logo) {
                     const originalLogoUrl = station.logo;
-                    const proxies = [
-                        `https://corsproxy.io/?${encodeURIComponent(originalLogoUrl)}`,
-                        `https://api.allorigins.win/raw?url=${encodeURIComponent(originalLogoUrl)}`,
-                        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalLogoUrl)}`
-                    ];
-                    
-                    let proxyIndex = 0;
-                    logoImg.addEventListener('error', function() {
+                const proxies = [
+                    `https://corsproxy.io/?${encodeURIComponent(originalLogoUrl)}`,
+                    `https://api.allorigins.win/raw?url=${encodeURIComponent(originalLogoUrl)}`,
+                    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalLogoUrl)}`
+                ];
+                
+                let proxyIndex = 0;
+                logoImg.addEventListener('error', function() {
                         if (loadTimeout) clearTimeout(loadTimeout);
-                        proxyIndex++;
-                        if (proxyIndex < proxies.length) {
-                            // Try next proxy
-                            this.src = proxies[proxyIndex];
+                    proxyIndex++;
+                    if (proxyIndex < proxies.length) {
+                        // Try next proxy
+                        this.src = proxies[proxyIndex];
                             loadTimeout = setTimeout(() => {
                                 this.src = window.radioApp.generatePlaceholderUrl(stationName);
                             }, 2000);
-                        } else {
-                            // All proxies failed, use placeholder
-                            this.src = window.radioApp.generatePlaceholderUrl(stationName);
-                        }
+                    } else {
+                        // All proxies failed, use placeholder
+                        this.src = window.radioApp.generatePlaceholderUrl(stationName);
+                    }
                     }, { once: false });
                 } else {
-                    // Non-proxy logo error handler
-                    logoImg.addEventListener('error', function() {
+                // Non-proxy logo error handler
+                logoImg.addEventListener('error', function() {
                         if (loadTimeout) clearTimeout(loadTimeout);
-                        const stationName = this.getAttribute('data-station-name');
-                        if (stationName && !this.src.includes('data:image/svg+xml')) {
-                            this.src = window.radioApp.generatePlaceholderUrl(stationName);
-                        }
+                    const stationName = this.getAttribute('data-station-name');
+                    if (stationName && !this.src.includes('data:image/svg+xml')) {
+                        this.src = window.radioApp.generatePlaceholderUrl(stationName);
+                    }
                     }, { once: true });
                 }
             }

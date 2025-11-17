@@ -586,10 +586,10 @@ body {
     flex-direction: column;
     min-height: 80px;
     align-items: center;
-    transition: all 0.3s ease;
-    /* Ensure player is not affected by zoom transform */
-    transform: none !important;
-    width: 100vw !important;
+    transition: transform 0.3s ease, width 0.3s ease;
+    width: 100vw;
+    box-sizing: border-box;
+    transform-origin: bottom left;
 }
 
 /* Player States */
@@ -656,8 +656,7 @@ body {
     background: linear-gradient(135deg, var(--background) 0%, #1a1f3a 100%);
     border: none;
     box-shadow: none;
-    /* Ensure player is not affected by zoom transform */
-    transform: none !important;
+    box-sizing: border-box;
 }
 
 .bottom-player.player-fullscreen .player-content {
