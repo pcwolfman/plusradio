@@ -529,7 +529,7 @@ class RadioApp {
         // Also resize when bottom player becomes visible
         if (this.bottomPlayer) {
             const observer = new MutationObserver(() => {
-                if (this.bottomPlayer && this.bottomPlayer.classList.contains('visible')) {
+                if (this.bottomPlayer) {
                     setTimeout(resizePlayerCanvas, 100);
                 }
             });
@@ -1606,8 +1606,7 @@ class RadioApp {
         // Add to recently played
         this.addToRecentlyPlayed(station);
         
-        // Show bottom player
-        this.bottomPlayer.classList.add('visible');
+        // Player is always visible now
         this.setPlayerState('normal');
         
         // Resize player spectrum canvas when player becomes visible
