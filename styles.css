@@ -573,23 +573,25 @@ body {
 
 /* Bottom Player */
 .bottom-player {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
     background: var(--surface);
     border-top: 1px solid var(--surface-light);
     box-shadow: 0 -4px 20px var(--shadow-lg);
-    z-index: 10000;
+    z-index: 10000 !important;
     padding: 0.75rem 2rem;
-    display: flex;
+    display: flex !important;
     flex-direction: column;
     min-height: 80px;
     align-items: center;
     transition: transform 0.3s ease, width 0.3s ease;
-    width: 100vw;
+    width: 100vw !important;
     box-sizing: border-box;
     transform-origin: bottom left;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 /* Player States */

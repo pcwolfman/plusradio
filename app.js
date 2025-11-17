@@ -51,6 +51,12 @@ class RadioApp {
         this.checkOnlineStatus();
         this.setupOnlineListeners();
         
+        // Ensure player is always visible from the start
+        if (this.bottomPlayer) {
+            this.bottomPlayer.style.display = 'flex';
+            this.bottomPlayer.style.visibility = 'visible';
+        }
+        
         this.init();
     }
     
@@ -474,6 +480,12 @@ class RadioApp {
             this.setupEventListeners();
             this.updateViewModeIcon();
             this.initSpectrum();
+            
+            // Ensure player is always visible
+            if (this.bottomPlayer) {
+                this.bottomPlayer.style.display = 'flex';
+                this.setPlayerState('normal');
+            }
             
         } catch (error) {
             console.error('Hata:', error);
