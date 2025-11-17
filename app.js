@@ -226,13 +226,10 @@ class RadioApp {
             this.appContainer.style.width = `${scalePercent}%`;
         }
         
-        // Apply zoom to player as well
+        // Player should NOT be affected by zoom - keep it at 100% and always visible
         if (this.bottomPlayer) {
-            this.bottomPlayer.style.transform = `scale(${this.zoomLevel})`;
-            this.bottomPlayer.style.transformOrigin = 'bottom left';
-            // Adjust player width to match zoom level
-            const playerScalePercent = (1 / this.zoomLevel) * 100;
-            this.bottomPlayer.style.width = `${playerScalePercent}%`;
+            this.bottomPlayer.style.transform = 'none';
+            this.bottomPlayer.style.width = '100vw';
         }
     }
     

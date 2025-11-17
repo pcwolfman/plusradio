@@ -586,12 +586,12 @@ body {
     flex-direction: column;
     min-height: 80px;
     align-items: center;
-    transition: transform 0.3s ease, width 0.3s ease;
     width: 100vw !important;
     box-sizing: border-box;
-    transform-origin: bottom left;
     visibility: visible !important;
     opacity: 1 !important;
+    /* Player should not be affected by parent zoom transforms */
+    transform: none !important;
 }
 
 /* Player States */

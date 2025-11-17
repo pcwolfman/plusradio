@@ -69,10 +69,11 @@
                 </div>
             </div>
         </main>
+    </div>
 
-        <!-- Bottom Player -->
-        <div class="bottom-player" id="bottomPlayer">
-            <div class="player-content">
+    <!-- Bottom Player (outside app-container to avoid zoom transform) -->
+    <div class="bottom-player" id="bottomPlayer">
+        <div class="player-content">
                 <div class="player-station-info">
                     <img id="stationLogo" src="" alt="Station Logo" class="player-logo">
                     <div class="player-info">
@@ -113,9 +114,8 @@
                         <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="80">
                     </div>
                 </div>
-            </div>
-            <audio id="audioPlayer" preload="none" crossorigin="anonymous"></audio>
         </div>
+        <audio id="audioPlayer" preload="none" crossorigin="anonymous"></audio>
     </div>
 
     <script src="m3u-parser.js"></script>
