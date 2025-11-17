@@ -25,8 +25,11 @@ class RadioApp {
         this.bottomPlayer = document.getElementById('bottomPlayer');
         this.playerFavoriteBtn = document.getElementById('playerFavoriteBtn');
         this.listToggleBtn = document.getElementById('listToggleBtn');
-        this.fullscreenToggleBtn = document.getElementById('fullscreenToggleBtn');
+        this.zoomToggleBtn = document.getElementById('zoomToggleBtn');
         this.playerSpectrumCanvas = document.getElementById('playerSpectrumCanvas');
+        
+        // Zoom state
+        this.zoomLevel = this.loadZoomLevel(); // 1.0 = normal, 1.25 = %125, 1.5 = %150, etc.
         this.spectrumStyleToggle = document.getElementById('spectrumStyleToggle');
         
         // Web Audio API for spectrum analysis
@@ -191,49 +194,60 @@ class RadioApp {
         }
     }
     
-    toggleFullscreen() {
-        if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement && !document.msFullscreenElement) {
-            // Enter fullscreen
-            const element = document.documentElement;
-            if (element.requestFullscreen) {
-                element.requestFullscreen();
-            } else if (element.webkitRequestFullscreen) {
-                element.webkitRequestFullscreen();
-            } else if (element.mozRequestFullScreen) {
-                element.mozRequestFullScreen();
-            } else if (element.msRequestFullscreen) {
-                element.msRequestFullscreen();
-            }
-        } else {
-            // Exit fullscreen
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            } else if (document.webkitExitFullscreen) {
-                document.webkitExitFullscreen();
-            } else if (document.mozCancelFullScreen) {
-                document.mozCancelFullScreen();
-            } else if (document.msExitFullscreen) {
-                document.msExitFullscreen();
-            }
+    loadZoomLevel() {
+        try {
+            const stored = localStorage.getItem('plusRadio_zoomLevel');
+            return stored ? parseFloat(stored) : 1.0;
+        } catch (e) {
+            return 1.0;
         }
     }
     
-    updateFullscreenIcon() {
-        if (!this.fullscreenToggleBtn) return;
+    saveZoomLevel() {
+        try {
+            localStorage.setItem('plusRadio_zoomLevel', this.zoomLevel.toString());
+        } catch (e) {
+            console.warn('Could not save zoom level:', e);
+        }
+    }
+    
+    applyZoom() {
+        if (this.appContainer) {
+            this.appContainer.style.transform = `scale(${this.zoomLevel})`;
+            this.appContainer.style.transformOrigin = 'top left';
+            // Adjust container width to prevent horizontal scroll
+            const scalePercent = (1 / this.zoomLevel) * 100;
+            this.appContainer.style.width = `${scalePercent}%`;
+        }
+    }
+    
+    toggleZoom() {
+        // Zoom levels: 1.0 (normal) -> 1.25 (125%) -> 1.5 (150%) -> 1.75 (175%) -> 2.0 (200%) -> 1.0
+        const zoomLevels = [1.0, 1.25, 1.5, 1.75, 2.0];
+        const currentIndex = zoomLevels.findIndex(level => Math.abs(level - this.zoomLevel) < 0.01);
+        const nextIndex = (currentIndex + 1) % zoomLevels.length;
         
-        const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
-        const fullscreenIcon = this.fullscreenToggleBtn.querySelector('.fullscreen-icon');
-        const fullscreenExitIcon = this.fullscreenToggleBtn.querySelector('.fullscreen-exit-icon');
+        this.zoomLevel = zoomLevels[nextIndex];
+        this.saveZoomLevel();
+        this.applyZoom();
+        this.updateZoomIcon();
+    }
+    
+    updateZoomIcon() {
+        if (!this.zoomToggleBtn) return;
         
-        if (fullscreenIcon && fullscreenExitIcon) {
-            if (isFullscreen) {
-                fullscreenIcon.style.display = 'none';
-                fullscreenExitIcon.style.display = 'block';
-                this.fullscreenToggleBtn.title = 'Tam ekrandan çık';
+        const zoomInIcon = this.zoomToggleBtn.querySelector('.zoom-in-icon');
+        const zoomOutIcon = this.zoomToggleBtn.querySelector('.zoom-out-icon');
+        
+        if (zoomInIcon && zoomOutIcon) {
+            if (this.zoomLevel > 1.0) {
+                zoomInIcon.style.display = 'none';
+                zoomOutIcon.style.display = 'block';
+                this.zoomToggleBtn.title = `Uzaklaştır (${Math.round(this.zoomLevel * 100)}%)`;
             } else {
-                fullscreenIcon.style.display = 'block';
-                fullscreenExitIcon.style.display = 'none';
-                this.fullscreenToggleBtn.title = 'Tam ekran';
+                zoomInIcon.style.display = 'block';
+                zoomOutIcon.style.display = 'none';
+                this.zoomToggleBtn.title = 'Yakınlaştır';
             }
         }
     }
@@ -1062,20 +1076,15 @@ class RadioApp {
             }
         });
 
-        // Fullscreen toggle
-        if (this.fullscreenToggleBtn) {
-            this.fullscreenToggleBtn.addEventListener('click', () => {
-                this.toggleFullscreen();
+        // Zoom toggle
+        if (this.zoomToggleBtn) {
+            this.zoomToggleBtn.addEventListener('click', () => {
+                this.toggleZoom();
             });
             
-            // Listen for fullscreen changes
-            document.addEventListener('fullscreenchange', () => this.updateFullscreenIcon());
-            document.addEventListener('webkitfullscreenchange', () => this.updateFullscreenIcon());
-            document.addEventListener('mozfullscreenchange', () => this.updateFullscreenIcon());
-            document.addEventListener('MSFullscreenChange', () => this.updateFullscreenIcon());
-            
-            // Initial icon update
-            this.updateFullscreenIcon();
+            // Apply saved zoom level on load
+            this.applyZoom();
+            this.updateZoomIcon();
         }
 
         // View mode toggle
