@@ -579,12 +579,11 @@ body {
     right: 0 !important;
     background: var(--surface);
     border-top: 1px solid var(--surface-light);
-    box-shadow: 0 -4px 20px var(--shadow-lg);
     z-index: 10000 !important;
-    padding: 0.75rem 2rem;
+    padding: 0.5rem 1.5rem;
     display: flex !important;
     flex-direction: column;
-    min-height: 80px;
+    min-height: 65px;
     align-items: center;
     width: 100vw !important;
     box-sizing: border-box;
@@ -592,6 +591,14 @@ body {
     opacity: 1 !important;
     /* Player should not be affected by parent zoom transforms */
     transform: none !important;
+    /* 3D Effect */
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4), 
+                0 -4px 16px rgba(99, 102, 241, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-top: 2px solid rgba(99, 102, 241, 0.3);
+    transform-style: preserve-3d;
+    perspective: 1000px;
 }
 
 /* Player States */
@@ -773,10 +780,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1.5rem;
+    gap: 1rem;
     max-width: 1400px;
     margin: 0 auto;
     height: 100%;
+    transform: translateZ(10px);
 }
 
 .player-station-info {
@@ -791,19 +799,23 @@ body {
 
 .player-spectrum-wrapper {
     flex: 2;
-    min-width: 200px;
-    max-width: 600px;
-    height: 70px;
+    min-width: 180px;
+    max-width: 500px;
+    height: 55px;
     border-radius: 8px;
     overflow: hidden;
     background: rgba(15, 23, 42, 0.8);
-    border: 1px solid rgba(99, 102, 241, 0.2);
+    border: 1px solid rgba(99, 102, 241, 0.3);
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.3s ease;
     cursor: pointer;
     position: relative;
+    /* 3D Effect */
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4),
+                0 2px 4px rgba(99, 102, 241, 0.2);
+    transform: translateZ(5px);
 }
 
 .player-spectrum-canvas {
@@ -818,8 +830,8 @@ body {
 }
 
 .player-logo {
-    width: 50px;
-    height: 50px;
+    width: 42px;
+    height: 42px;
     border-radius: 8px;
     object-fit: cover;
     flex-shrink: 0;
@@ -835,6 +847,10 @@ body {
     transition: opacity 0.2s ease;
     /* High priority for player logo */
     fetchpriority: high;
+    /* 3D Effect */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    transform: translateZ(5px);
 }
 
 .player-info {
@@ -849,19 +865,19 @@ body {
 }
 
 .player-station-name {
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: 600;
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.2rem;
     text-align: left;
     width: 100%;
 }
 
 .player-station-group {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
@@ -879,8 +895,8 @@ body {
 }
 
 .player-btn {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     background: var(--background);
     border: 2px solid var(--surface-light);
@@ -891,6 +907,10 @@ body {
     justify-content: center;
     transition: all 0.3s ease;
     padding: 0;
+    /* 3D Effect */
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    transform: translateZ(3px);
 }
 
 .player-btn svg {
@@ -901,29 +921,38 @@ body {
 .player-btn:hover {
     background: var(--surface-light);
     border-color: var(--primary-color);
-    transform: scale(1.1);
+    transform: scale(1.1) translateZ(5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4),
+                0 2px 4px rgba(99, 102, 241, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .play-pause-btn {
-    width: 48px;
-    height: 48px;
+    width: 42px;
+    height: 42px;
     background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
     border: none;
     color: white;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5),
+                0 2px 4px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
     cursor: pointer;
     transition: all 0.3s ease;
     position: relative;
+    /* 3D Effect */
+    transform: translateZ(8px);
 }
 
 .play-pause-btn:hover {
     background: linear-gradient(135deg, var(--primary-dark), var(--primary-color));
-    transform: scale(1.1);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.6);
+    transform: scale(1.1) translateZ(12px);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.7),
+                0 3px 6px rgba(0, 0, 0, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 .play-pause-btn:active {
-    transform: scale(0.95);
+    transform: scale(0.95) translateZ(6px);
 }
 
 .play-pause-btn.playing {

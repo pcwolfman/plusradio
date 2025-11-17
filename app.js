@@ -57,6 +57,7 @@ class RadioApp {
             this.bottomPlayer.style.visibility = 'visible';
         }
         
+        // Set initial placeholder for player logo (will be set after init)
         this.init();
     }
     
@@ -482,6 +483,12 @@ class RadioApp {
             if (this.bottomPlayer) {
                 this.bottomPlayer.style.display = 'flex';
                 this.setPlayerState('normal');
+                
+                // Set initial placeholder for player logo if empty
+                const stationLogo = document.getElementById('stationLogo');
+                if (stationLogo && (!stationLogo.src || stationLogo.src === '' || stationLogo.src === window.location.href)) {
+                    stationLogo.src = this.generatePlaceholderUrl('Radyo');
+                }
             }
             
         } catch (error) {
