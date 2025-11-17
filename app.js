@@ -222,8 +222,8 @@ class RadioApp {
     }
     
     toggleZoom() {
-        // Zoom levels: 1.0 (normal) -> 1.25 (125%) -> 1.5 (150%) -> 1.75 (175%) -> 2.0 (200%) -> 1.0
-        const zoomLevels = [1.0, 1.25, 1.5, 1.75, 2.0];
+        // Zoom levels: 1.0 (100%) -> 0.9 (90%) -> 0.85 (85%) -> 0.8 (80%) -> 1.0 (100%)
+        const zoomLevels = [1.0, 0.9, 0.85, 0.8];
         const currentIndex = zoomLevels.findIndex(level => Math.abs(level - this.zoomLevel) < 0.01);
         const nextIndex = (currentIndex + 1) % zoomLevels.length;
         
@@ -236,18 +236,18 @@ class RadioApp {
     updateZoomIcon() {
         if (!this.zoomToggleBtn) return;
         
-        const zoomInIcon = this.zoomToggleBtn.querySelector('.zoom-in-icon');
-        const zoomOutIcon = this.zoomToggleBtn.querySelector('.zoom-out-icon');
+        const fullscreenIcon = this.zoomToggleBtn.querySelector('.fullscreen-icon');
+        const fullscreenExitIcon = this.zoomToggleBtn.querySelector('.fullscreen-exit-icon');
         
-        if (zoomInIcon && zoomOutIcon) {
-            if (this.zoomLevel > 1.0) {
-                zoomInIcon.style.display = 'none';
-                zoomOutIcon.style.display = 'block';
-                this.zoomToggleBtn.title = `Uzaklaştır (${Math.round(this.zoomLevel * 100)}%)`;
+        if (fullscreenIcon && fullscreenExitIcon) {
+            if (this.zoomLevel < 1.0) {
+                fullscreenIcon.style.display = 'none';
+                fullscreenExitIcon.style.display = 'block';
+                this.zoomToggleBtn.title = `Tam ekran (${Math.round(this.zoomLevel * 100)}%)`;
             } else {
-                zoomInIcon.style.display = 'block';
-                zoomOutIcon.style.display = 'none';
-                this.zoomToggleBtn.title = 'Yakınlaştır';
+                fullscreenIcon.style.display = 'block';
+                fullscreenExitIcon.style.display = 'none';
+                this.zoomToggleBtn.title = 'Tam ekran';
             }
         }
     }
