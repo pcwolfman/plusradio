@@ -84,6 +84,48 @@
             <div class="player-spectrum-wrapper">
                 <canvas id="playerSpectrumCanvas" class="player-spectrum-canvas"></canvas>
             </div>
+            <div class="player-navigation-controls">
+                <button class="player-btn prev-btn" id="prevStationBtn" title="Önceki kanal">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="19 20 9 12 19 4 19 20"></polygon>
+                        <line x1="5" y1="19" x2="5" y2="5"></line>
+                    </svg>
+                </button>
+                <button class="player-btn spectrum-style-toggle" id="spectrumStyleToggleFullscreen" title="Spektrum stilini değiştir">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
+                    </svg>
+                </button>
+                <button class="player-btn favorite-btn" id="playerFavoriteBtnFullscreen" title="Favorilere ekle">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                    </svg>
+                </button>
+                <button class="player-btn play-pause-btn" id="playPauseBtnFullscreen" title="Oynat">
+                    <svg class="play-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    <svg class="pause-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+                        <rect x="6" y="4" width="4" height="16"></rect>
+                        <rect x="14" y="4" width="4" height="16"></rect>
+                    </svg>
+                </button>
+                <div class="volume-control">
+                    <button class="player-btn volume-btn" id="volumeBtnFullscreen">
+                        <svg class="volume-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        </svg>
+                    </button>
+                    <input type="range" id="volumeSliderFullscreen" class="volume-slider" min="0" max="100" value="80">
+                </div>
+                <button class="player-btn next-btn" id="nextStationBtn" title="Sonraki kanal">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                        <line x1="19" y1="5" x2="19" y2="19"></line>
+                    </svg>
+                </button>
+            </div>
             <div class="player-controls">
                 <button class="player-btn spectrum-style-toggle" id="spectrumStyleToggle" title="Spektrum stilini değiştir">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

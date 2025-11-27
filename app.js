@@ -20,6 +20,8 @@ class RadioApp {
         this.playPauseBtn = document.getElementById('playPauseBtn');
         this.volumeBtn = document.getElementById('volumeBtn');
         this.volumeSlider = document.getElementById('volumeSlider');
+        this.prevStationBtn = document.getElementById('prevStationBtn');
+        this.nextStationBtn = document.getElementById('nextStationBtn');
         this.searchInput = document.getElementById('searchInput');
         this.searchBtn = null; // Removed from HTML
         this.bottomPlayer = document.getElementById('bottomPlayer');
@@ -31,6 +33,11 @@ class RadioApp {
         // Zoom state
         this.zoomLevel = this.loadZoomLevel(); // 1.0 = normal, 1.25 = %125, 1.5 = %150, etc.
         this.spectrumStyleToggle = document.getElementById('spectrumStyleToggle');
+        this.spectrumStyleToggleFullscreen = document.getElementById('spectrumStyleToggleFullscreen');
+        this.playerFavoriteBtnFullscreen = document.getElementById('playerFavoriteBtnFullscreen');
+        this.playPauseBtnFullscreen = document.getElementById('playPauseBtnFullscreen');
+        this.volumeBtnFullscreen = document.getElementById('volumeBtnFullscreen');
+        this.volumeSliderFullscreen = document.getElementById('volumeSliderFullscreen');
         
         // Web Audio API for spectrum analysis
         this.audioContext = null;
@@ -1026,6 +1033,81 @@ class RadioApp {
             }
         });
 
+        // Previous/Next/Stop station buttons
+        if (this.prevStationBtn) {
+            this.prevStationBtn.addEventListener('click', () => {
+                this.playPreviousStation();
+            });
+        }
+
+        if (this.nextStationBtn) {
+            this.nextStationBtn.addEventListener('click', () => {
+                this.playNextStation();
+            });
+        }
+
+        // Fullscreen buttons
+        if (this.playPauseBtnFullscreen) {
+            this.playPauseBtnFullscreen.addEventListener('click', () => {
+                if (this.currentStation) {
+                    this.togglePlayPause();
+                }
+            });
+        }
+
+        if (this.volumeSliderFullscreen) {
+            this.volumeSliderFullscreen.addEventListener('input', (e) => {
+                this.setVolume(e.target.value / 100);
+                // Sync with main volume slider
+                if (this.volumeSlider) {
+                    this.volumeSlider.value = e.target.value;
+                }
+            });
+        }
+
+        if (this.volumeBtnFullscreen) {
+            this.volumeBtnFullscreen.addEventListener('click', () => {
+                if (this.audio.volume > 0) {
+                    if (this.volumeSliderFullscreen) this.volumeSliderFullscreen.value = 0;
+                    if (this.volumeSlider) this.volumeSlider.value = 0;
+                    this.setVolume(0);
+                } else {
+                    if (this.volumeSliderFullscreen) this.volumeSliderFullscreen.value = 80;
+                    if (this.volumeSlider) this.volumeSlider.value = 80;
+                    this.setVolume(0.8);
+                }
+            });
+        }
+
+        if (this.spectrumStyleToggleFullscreen) {
+            this.spectrumStyleToggleFullscreen.addEventListener('click', () => {
+                this.toggleSpectrumStyle();
+            });
+        }
+
+        if (this.playerFavoriteBtnFullscreen) {
+            this.playerFavoriteBtnFullscreen.addEventListener('click', () => {
+                if (this.currentStation) {
+                    const isNowFavorite = this.toggleFavorite(this.currentStation);
+                    this.updatePlayerFavoriteButton();
+                }
+            });
+        }
+
+        // Sync volume sliders
+        if (this.volumeSlider) {
+            this.volumeSlider.addEventListener('input', (e) => {
+                if (this.volumeSliderFullscreen) {
+                    this.volumeSliderFullscreen.value = e.target.value;
+                }
+            });
+        }
+
+        // Sync initial volume slider values
+        if (this.volumeSlider && this.volumeSliderFullscreen) {
+            this.volumeSliderFullscreen.value = this.volumeSlider.value;
+        }
+
         // Audio events
         this.audio.addEventListener('play', () => {
             this.clearLoadingTimeout();
@@ -1529,13 +1611,13 @@ class RadioApp {
                 const stationName = station.name;
                 let loadTimeout = null;
                 
-                // Set timeout for logo loading (3 seconds)
+                // Set timeout for logo loading (1.5 seconds - faster)
                 loadTimeout = setTimeout(() => {
                     if (!logoImg.complete || logoImg.naturalWidth === 0) {
                         // Logo didn't load in time, use placeholder
                         logoImg.src = this.generatePlaceholderUrl(stationName);
                     }
-                }, 3000);
+                }, 1500);
                 
                 // Clear timeout when image loads successfully
                 logoImg.addEventListener('load', () => {
@@ -1560,7 +1642,7 @@ class RadioApp {
                         this.src = proxies[proxyIndex];
                             loadTimeout = setTimeout(() => {
                                 this.src = window.radioApp.generatePlaceholderUrl(stationName);
-                            }, 2000);
+                            }, 1000);
                     } else {
                         // All proxies failed, use placeholder
                         this.src = window.radioApp.generatePlaceholderUrl(stationName);
@@ -1631,11 +1713,13 @@ class RadioApp {
         // Add to recently played
         this.addToRecentlyPlayed(station);
         
-        // Player is always visible now
-        this.setPlayerState('normal');
+        // Preserve player state if in fullscreen, otherwise set to normal
+        if (this.playerState !== 'fullscreen') {
+            this.setPlayerState('normal');
+        }
         
-        // Resize player spectrum canvas when player becomes visible
-        if (this.playerSpectrumCanvas) {
+        // Resize player spectrum canvas when player becomes visible (only if not fullscreen)
+        if (this.playerSpectrumCanvas && this.playerState !== 'fullscreen') {
             setTimeout(() => {
                 try {
                     const wrapper = this.playerSpectrumCanvas.parentElement;
@@ -1659,6 +1743,11 @@ class RadioApp {
                     this.playerSpectrumCanvas.height = 60;
                 }
             }, 150);
+        } else if (this.playerSpectrumCanvas && this.playerState === 'fullscreen') {
+            // In fullscreen, just resize the canvas without changing state
+            setTimeout(() => {
+                this.resizeSpectrumCanvas();
+            }, 100);
         }
         
         // Update bottom player UI
@@ -1700,12 +1789,12 @@ class RadioApp {
         logoImg.setAttribute('fetchpriority', 'high');
         logoImg.setAttribute('loading', 'eager'); // Player logo should load immediately
         
-        // Set timeout for player logo loading (2 seconds - faster for player)
+        // Set timeout for player logo loading (1 second - faster for player)
         let playerLogoTimeout = setTimeout(() => {
             if (!logoImg.complete || logoImg.naturalWidth === 0) {
                 logoImg.src = this.generatePlaceholderUrl(station.name);
             }
-        }, 2000);
+        }, 1000);
         
         // Clear timeout when image loads successfully
         logoImg.addEventListener('load', () => {
@@ -1731,7 +1820,7 @@ class RadioApp {
                     this.src = proxies[proxyIndex];
                     playerLogoTimeout = setTimeout(() => {
                         this.src = window.radioApp.generatePlaceholderUrl(station.name);
-                    }, 1500);
+                    }, 800);
                 } else {
                     // All proxies failed, use placeholder
                     this.src = window.radioApp.generatePlaceholderUrl(station.name);
@@ -1776,6 +1865,11 @@ class RadioApp {
         const isFav = this.isFavorite(this.currentStation);
         this.playerFavoriteBtn.classList.toggle('active', isFav);
         this.playerFavoriteBtn.title = isFav ? 'Favorilerden çıkar' : 'Favorilere ekle';
+        
+        if (this.playerFavoriteBtnFullscreen) {
+            this.playerFavoriteBtnFullscreen.classList.toggle('active', isFav);
+            this.playerFavoriteBtnFullscreen.title = isFav ? 'Favorilerden çıkar' : 'Favorilere ekle';
+        }
         
         // Add click handler if not already added
         if (!this.playerFavoriteBtn.hasAttribute('data-handler-attached')) {
@@ -1884,6 +1978,90 @@ class RadioApp {
         }
     }
 
+    getWorkingStations() {
+        // Get all working stations in the currently displayed category
+        // Always use currentCategory to stay in the same page/category
+        const categoryToUse = this.currentCategory;
+        
+        let allStations = [];
+        
+        if (categoryToUse === 'Tümü') {
+            allStations = this.parser.stations;
+        } else if (categoryToUse === 'Favoriler') {
+            allStations = this.favorites.map(favId => {
+                return this.parser.stations.find(s => this.getStationId(s) === favId);
+            }).filter(s => s !== undefined);
+        } else if (categoryToUse === 'Son Dinlenenler') {
+            allStations = this.recentlyPlayed.map(recentId => {
+                return this.parser.stations.find(s => this.getStationId(s) === recentId);
+            }).filter(s => s !== undefined);
+        } else {
+            allStations = this.parser.getStationsByCategory(categoryToUse);
+        }
+        
+        return allStations.filter(s => !this.isBroken(s));
+    }
+
+    playNextStation() {
+        if (!this.currentStation) return;
+        
+        const workingStations = this.getWorkingStations();
+        if (workingStations.length === 0) return;
+        
+        const currentIndex = workingStations.findIndex(s => 
+            this.getStationId(s) === this.getStationId(this.currentStation)
+        );
+        
+        const nextIndex = currentIndex >= 0 && currentIndex < workingStations.length - 1
+            ? currentIndex + 1
+            : 0;
+        
+        // Don't change category, just select the station
+        this.selectStation(workingStations[nextIndex], null);
+    }
+
+    playPreviousStation() {
+        if (!this.currentStation) return;
+        
+        const workingStations = this.getWorkingStations();
+        if (workingStations.length === 0) return;
+        
+        const currentIndex = workingStations.findIndex(s => 
+            this.getStationId(s) === this.getStationId(this.currentStation)
+        );
+        
+        const prevIndex = currentIndex > 0
+            ? currentIndex - 1
+            : workingStations.length - 1;
+        
+        // Don't change category, just select the station
+        this.selectStation(workingStations[prevIndex], null);
+    }
+
+    stopStation() {
+        if (!this.currentStation) return;
+        
+        // Toggle: if playing, stop; if stopped, play
+        if (this.isPlaying) {
+            // Stop
+            if (this.audio) {
+                this.audio.pause();
+                this.audio.currentTime = 0;
+            }
+            this.isPlaying = false;
+            this.updatePlayButton();
+            this.stopSpectrumAnimation();
+        } else {
+            // Play
+            if (this.audio) {
+                this.audio.play().catch(error => {
+                    console.error('Play error:', error);
+                    this.showError('Radyo yayını başlatılamadı. Lütfen tekrar deneyin.');
+                });
+            }
+        }
+    }
+
     togglePlayPause() {
         if (!this.currentStation) return;
 
@@ -1901,33 +2079,70 @@ class RadioApp {
         if (this.isPlaying) {
             this.playPauseBtn.classList.add('playing');
             this.playPauseBtn.title = 'Durdur';
+            if (this.playPauseBtnFullscreen) {
+                this.playPauseBtnFullscreen.classList.add('playing');
+                this.playPauseBtnFullscreen.title = 'Durdur';
+            }
         } else {
             this.playPauseBtn.classList.remove('playing');
             this.playPauseBtn.title = 'Oynat';
+            if (this.playPauseBtnFullscreen) {
+                this.playPauseBtnFullscreen.classList.remove('playing');
+                this.playPauseBtnFullscreen.title = 'Oynat';
+            }
         }
+        
+        // Update play/pause icons
+        const playIcons = [this.playPauseBtn, this.playPauseBtnFullscreen].filter(btn => btn);
+        playIcons.forEach(btn => {
+            const playIcon = btn.querySelector('.play-icon');
+            const pauseIcon = btn.querySelector('.pause-icon');
+            if (playIcon && pauseIcon) {
+                if (this.isPlaying) {
+                    playIcon.style.display = 'none';
+                    pauseIcon.style.display = 'block';
+                } else {
+                    playIcon.style.display = 'block';
+                    pauseIcon.style.display = 'none';
+                }
+            }
+        });
     }
 
     setVolume(value) {
         this.audio.volume = value;
         
-        // Update volume button icon
-        const volumeIcon = this.volumeBtn.querySelector('svg');
-        if (value === 0) {
-            volumeIcon.innerHTML = `
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                <line x1="23" y1="9" x2="17" y2="15"></line>
-                <line x1="17" y1="9" x2="23" y2="15"></line>
-            `;
-        } else if (value < 0.5) {
-            volumeIcon.innerHTML = `
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            `;
-        } else {
-            volumeIcon.innerHTML = `
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-            `;
+        // Update volume sliders
+        if (this.volumeSlider) {
+            this.volumeSlider.value = value * 100;
         }
+        if (this.volumeSliderFullscreen) {
+            this.volumeSliderFullscreen.value = value * 100;
+        }
+        
+        // Update volume button icons (both normal and fullscreen)
+        const volumeButtons = [this.volumeBtn, this.volumeBtnFullscreen].filter(btn => btn);
+        volumeButtons.forEach(volumeBtn => {
+            const volumeIcon = volumeBtn.querySelector('svg');
+            if (volumeIcon) {
+                if (value === 0) {
+                    volumeIcon.innerHTML = `
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <line x1="23" y1="9" x2="17" y2="15"></line>
+                        <line x1="17" y1="9" x2="23" y2="15"></line>
+                    `;
+                } else if (value < 0.5) {
+                    volumeIcon.innerHTML = `
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                    `;
+                } else {
+                    volumeIcon.innerHTML = `
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    `;
+                }
+            }
+        });
     }
 
     searchChannels(query) {
