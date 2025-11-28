@@ -82,6 +82,20 @@
                 </div>
             </div>
             <div class="player-spectrum-wrapper">
+                <div class="player-progress-container">
+                    <img id="stationLogoSmall" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImdyYWQiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiM2MzY2ZjE7c3RvcC1vcGFjaXR5OjEiIC8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdHlsZT0ic3RvcC1jb2xvcjojNjM2NmYxODg7c3RvcC1vcGFjaXR5OjAuOCIgLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0idXJsKCNncmFkKSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSJ3aGl0ZSIgZm9udC1zaXplPSI0OCIgZm9udC13ZWlnaHQ9ImJvbGQiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiI+UkQ8L3RleHQ+PC9zdmc+" alt="Radyo Logo" class="player-logo-small">
+                    <div class="player-progress-content">
+                        <div id="stationNameProgress" class="player-station-name-progress">Radyo Seçin</div>
+                        <div class="player-progress-bar">
+                            <div class="player-progress-fill" id="playerProgressFill"></div>
+                        </div>
+                        <div class="player-time-info">
+                            <span class="player-time-current" id="playerTimeCurrent">0:00</span>
+                            <span class="player-time-separator">/</span>
+                            <span class="player-time-duration" id="playerTimeDuration">0:00</span>
+                        </div>
+                    </div>
+                </div>
                 <canvas id="playerSpectrumCanvas" class="player-spectrum-canvas"></canvas>
             </div>
             <div class="player-navigation-controls">
@@ -89,6 +103,14 @@
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="19 20 9 12 19 4 19 20"></polygon>
                         <line x1="5" y1="19" x2="5" y2="5"></line>
+                    </svg>
+                </button>
+                <button class="player-btn zoom-toggle-btn-fullscreen" id="zoomToggleBtnFullscreen" title="Yakınlaştır">
+                    <svg class="fullscreen-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                    </svg>
+                    <svg class="fullscreen-exit-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+                        <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
                     </svg>
                 </button>
                 <button class="player-btn spectrum-style-toggle" id="spectrumStyleToggleFullscreen" title="Spektrum stilini değiştir">

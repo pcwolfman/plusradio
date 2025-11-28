@@ -28,6 +28,7 @@ class RadioApp {
         this.playerFavoriteBtn = document.getElementById('playerFavoriteBtn');
         this.listToggleBtn = document.getElementById('listToggleBtn');
         this.zoomToggleBtn = document.getElementById('zoomToggleBtn');
+        this.zoomToggleBtnFullscreen = document.getElementById('zoomToggleBtnFullscreen');
         this.playerSpectrumCanvas = document.getElementById('playerSpectrumCanvas');
         
         // Zoom state
@@ -38,6 +39,10 @@ class RadioApp {
         this.playPauseBtnFullscreen = document.getElementById('playPauseBtnFullscreen');
         this.volumeBtnFullscreen = document.getElementById('volumeBtnFullscreen');
         this.volumeSliderFullscreen = document.getElementById('volumeSliderFullscreen');
+        this.playerProgressFill = document.getElementById('playerProgressFill');
+        this.playerTimeCurrent = document.getElementById('playerTimeCurrent');
+        this.playerTimeDuration = document.getElementById('playerTimeDuration');
+        this.playerProgressBar = document.querySelector('.player-progress-bar');
         
         // Web Audio API for spectrum analysis
         this.audioContext = null;
@@ -226,18 +231,46 @@ class RadioApp {
     }
     
     applyZoom() {
-        if (this.appContainer) {
-            this.appContainer.style.transform = `scale(${this.zoomLevel})`;
-            this.appContainer.style.transformOrigin = 'top left';
-            // Adjust container width to prevent horizontal scroll
-            const scalePercent = (1 / this.zoomLevel) * 100;
-            this.appContainer.style.width = `${scalePercent}%`;
-        }
-        
-        // Player should NOT be affected by zoom - keep it at 100% and always visible
-        if (this.bottomPlayer) {
-            this.bottomPlayer.style.transform = 'none';
-            this.bottomPlayer.style.width = '100vw';
+        // Check if we're in fullscreen player mode
+        if (this.playerState === 'fullscreen' && this.bottomPlayer) {
+            // In fullscreen mode, apply zoom to player-content
+            const playerContent = this.bottomPlayer.querySelector('.player-content');
+            if (playerContent) {
+                playerContent.style.transform = `scale(${this.zoomLevel})`;
+                playerContent.style.transformOrigin = 'center center';
+                // Don't adjust width/height, let transform handle scaling
+            }
+            // Keep bottomPlayer at full size
+            if (this.bottomPlayer) {
+                this.bottomPlayer.style.transform = 'none';
+                this.bottomPlayer.style.width = '100vw';
+                this.bottomPlayer.style.height = '100vh';
+            }
+        } else {
+            // Normal mode: apply zoom to appContainer
+            if (this.appContainer) {
+                this.appContainer.style.transform = `scale(${this.zoomLevel})`;
+                this.appContainer.style.transformOrigin = 'top left';
+                // Adjust container width to prevent horizontal scroll
+                const scalePercent = (1 / this.zoomLevel) * 100;
+                this.appContainer.style.width = `${scalePercent}%`;
+            }
+            
+            // Reset player-content transform in normal mode
+            if (this.bottomPlayer) {
+                const playerContent = this.bottomPlayer.querySelector('.player-content');
+                if (playerContent) {
+                    playerContent.style.transform = 'none';
+                    playerContent.style.width = '';
+                    playerContent.style.height = '';
+                }
+            }
+            
+            // Player should NOT be affected by zoom in normal mode - keep it at 100% and always visible
+            if (this.bottomPlayer) {
+                this.bottomPlayer.style.transform = 'none';
+                this.bottomPlayer.style.width = '100vw';
+            }
         }
     }
     
@@ -254,20 +287,39 @@ class RadioApp {
     }
     
     updateZoomIcon() {
-        if (!this.zoomToggleBtn) return;
+        // Update main zoom button
+        if (this.zoomToggleBtn) {
+            const fullscreenIcon = this.zoomToggleBtn.querySelector('.fullscreen-icon');
+            const fullscreenExitIcon = this.zoomToggleBtn.querySelector('.fullscreen-exit-icon');
+            
+            if (fullscreenIcon && fullscreenExitIcon) {
+                if (this.zoomLevel < 1.0) {
+                    fullscreenIcon.style.display = 'none';
+                    fullscreenExitIcon.style.display = 'block';
+                    this.zoomToggleBtn.title = `Tam ekran (${Math.round(this.zoomLevel * 100)}%)`;
+                } else {
+                    fullscreenIcon.style.display = 'block';
+                    fullscreenExitIcon.style.display = 'none';
+                    this.zoomToggleBtn.title = 'Tam ekran';
+                }
+            }
+        }
         
-        const fullscreenIcon = this.zoomToggleBtn.querySelector('.fullscreen-icon');
-        const fullscreenExitIcon = this.zoomToggleBtn.querySelector('.fullscreen-exit-icon');
-        
-        if (fullscreenIcon && fullscreenExitIcon) {
-            if (this.zoomLevel < 1.0) {
-                fullscreenIcon.style.display = 'none';
-                fullscreenExitIcon.style.display = 'block';
-                this.zoomToggleBtn.title = `Tam ekran (${Math.round(this.zoomLevel * 100)}%)`;
-            } else {
-                fullscreenIcon.style.display = 'block';
-                fullscreenExitIcon.style.display = 'none';
-                this.zoomToggleBtn.title = 'Tam ekran';
+        // Update fullscreen player zoom button
+        if (this.zoomToggleBtnFullscreen) {
+            const fullscreenIcon = this.zoomToggleBtnFullscreen.querySelector('.fullscreen-icon');
+            const fullscreenExitIcon = this.zoomToggleBtnFullscreen.querySelector('.fullscreen-exit-icon');
+            
+            if (fullscreenIcon && fullscreenExitIcon) {
+                if (this.zoomLevel < 1.0) {
+                    fullscreenIcon.style.display = 'none';
+                    fullscreenExitIcon.style.display = 'block';
+                    this.zoomToggleBtnFullscreen.title = `Yakınlaştır (${Math.round(this.zoomLevel * 100)}%)`;
+                } else {
+                    fullscreenIcon.style.display = 'block';
+                    fullscreenExitIcon.style.display = 'none';
+                    this.zoomToggleBtnFullscreen.title = 'Yakınlaştır';
+                }
             }
         }
     }
@@ -1108,6 +1160,17 @@ class RadioApp {
             this.volumeSliderFullscreen.value = this.volumeSlider.value;
         }
 
+        // Progress bar click handler (for seeking, if supported)
+        if (this.playerProgressBar) {
+            this.playerProgressBar.addEventListener('click', (e) => {
+                if (this.audio.duration && isFinite(this.audio.duration)) {
+                    const rect = this.playerProgressBar.getBoundingClientRect();
+                    const percent = (e.clientX - rect.left) / rect.width;
+                    this.audio.currentTime = percent * this.audio.duration;
+                }
+            });
+        }
+
         // Audio events
         this.audio.addEventListener('play', () => {
             this.clearLoadingTimeout();
@@ -1172,6 +1235,22 @@ class RadioApp {
             }, 15000);
         });
 
+        this.audio.addEventListener('loadedmetadata', () => {
+            this.updateProgressBar();
+        });
+
+        this.audio.addEventListener('timeupdate', () => {
+            this.updateProgressBar();
+        });
+
+        this.audio.addEventListener('loadedmetadata', () => {
+            this.updateProgressBar();
+        });
+
+        this.audio.addEventListener('timeupdate', () => {
+            this.updateProgressBar();
+        });
+
         // Search
         this.searchInput.addEventListener('input', (e) => {
             this.searchChannels(e.target.value);
@@ -1192,6 +1271,13 @@ class RadioApp {
             // Apply saved zoom level on load
             this.applyZoom();
             this.updateZoomIcon();
+        }
+        
+        // Zoom toggle for fullscreen player
+        if (this.zoomToggleBtnFullscreen) {
+            this.zoomToggleBtnFullscreen.addEventListener('click', () => {
+                this.toggleZoom();
+            });
         }
 
         // View mode toggle
@@ -1357,6 +1443,9 @@ class RadioApp {
         
         // Add new state class
         this.bottomPlayer.classList.add(`player-${state}`);
+        
+        // Apply zoom when state changes (especially important for fullscreen)
+        this.applyZoom();
         
         // Resize spectrum canvas when state changes
         setTimeout(() => {
@@ -1529,28 +1618,30 @@ class RadioApp {
             }
             
             // Only use placeholder if logo is truly empty
-            if (!logoUrl || logoUrl === '' || logoUrl === 'undefined' || logoUrl === 'null') {
+            const originalLogoUrl = logoUrl && logoUrl !== '' && logoUrl !== 'undefined' && logoUrl !== 'null' ? logoUrl : null;
+            if (!originalLogoUrl) {
                 logoUrl = this.generatePlaceholderUrl(station.name);
                 useProxy = false;
-            } else if (useProxy) {
-                // Use proxy for the logo URL
-                logoUrl = this.getProxiedLogoUrl(logoUrl);
             }
+            // Try direct URL first, proxy will be fallback in error handler
             
             // Different HTML structure based on view mode
             // Optimize logo loading with decode="async" and fetchpriority
-            const isVisible = item.offsetParent !== null;
-            const fetchPriority = (this.currentStation && this.currentStation.name === station.name) ? 'high' : 'low';
+            // Use eager loading for first 30 items (visible area on homepage)
+            const itemIndex = stations.indexOf(station);
+            const isInViewport = itemIndex < 30;
+            const isPlaying = (this.currentStation && this.currentStation.name === station.name);
+            const fetchPriority = isPlaying ? 'high' : (isInViewport ? 'high' : 'low');
+            const loadingStrategy = (isInViewport || isPlaying) ? 'eager' : 'lazy';
             
             if (this.viewMode === 'compact') {
                 // Compact view: küçük kutucuklar, sadece logo ve isim
                 item.innerHTML = `
                     <img src="${logoUrl}" alt="${station.name}" class="channel-logo" 
-                         loading="lazy"
+                         loading="${loadingStrategy}"
                          decoding="async"
                          fetchpriority="${fetchPriority}"
                          referrerpolicy="no-referrer"
-                         crossorigin="anonymous"
                          data-station-name="${station.name.replace(/"/g, '&quot;')}">
                     <div class="channel-info">
                         <div class="channel-name">${station.name}</div>
@@ -1566,11 +1657,10 @@ class RadioApp {
                 item.innerHTML = `
                     <div class="channel-logo-wrapper">
                         <img src="${logoUrl}" alt="${station.name}" class="channel-logo" 
-                             loading="lazy"
+                             loading="${loadingStrategy}"
                              decoding="async"
                              fetchpriority="${fetchPriority}"
                              referrerpolicy="no-referrer"
-                             crossorigin="anonymous"
                              data-station-name="${station.name.replace(/"/g, '&quot;')}">
                         <button class="favorite-star ${isFav ? 'active' : ''}" title="${isFav ? 'Favorilerden çıkar' : 'Favorilere ekle'}">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1587,11 +1677,10 @@ class RadioApp {
                 // Normal view: liste görünümü (mevcut)
                 item.innerHTML = `
                     <img src="${logoUrl}" alt="${station.name}" class="channel-logo" 
-                         loading="lazy"
+                         loading="${loadingStrategy}"
                          decoding="async"
                          fetchpriority="${fetchPriority}"
                          referrerpolicy="no-referrer"
-                         crossorigin="anonymous"
                          data-station-name="${station.name.replace(/"/g, '&quot;')}">
                     <div class="channel-info">
                         <div class="channel-name">${station.name}</div>
@@ -1605,19 +1694,37 @@ class RadioApp {
                 `;
             }
 
-            // Logo error handler with proxy fallback and timeout
+            // Logo error handler with proxy fallback
             const logoImg = item.querySelector('.channel-logo');
-            if (logoImg) {
+            if (logoImg && originalLogoUrl) {
                 const stationName = station.name;
                 let loadTimeout = null;
+                let hasTriedProxy = false;
                 
-                // Set timeout for logo loading (1.5 seconds - faster)
+                // Set timeout (10 seconds for visible items, 8 seconds for others)
+                const timeoutDuration = isInViewport ? 10000 : 8000;
+                
+                // Start loading with direct URL first
                 loadTimeout = setTimeout(() => {
                     if (!logoImg.complete || logoImg.naturalWidth === 0) {
-                        // Logo didn't load in time, use placeholder
-                        logoImg.src = this.generatePlaceholderUrl(stationName);
+                        // Logo didn't load in time, try proxy if we haven't already
+                        if (!hasTriedProxy && !logoImg.src.includes('corsproxy.io') && !logoImg.src.includes('data:image/svg+xml')) {
+                            hasTriedProxy = true;
+                            const proxyUrl = this.getProxiedLogoUrl(originalLogoUrl);
+                            logoImg.src = proxyUrl;
+                            
+                            // Set timeout for proxy attempt (5 seconds)
+                            loadTimeout = setTimeout(() => {
+                                if (!logoImg.complete || logoImg.naturalWidth === 0) {
+                                    logoImg.src = this.generatePlaceholderUrl(stationName);
+                                }
+                            }, 5000);
+                        } else {
+                            // All attempts failed, use placeholder
+                            logoImg.src = this.generatePlaceholderUrl(stationName);
+                        }
                     }
-                }, 1500);
+                }, timeoutDuration);
                 
                 // Clear timeout when image loads successfully
                 logoImg.addEventListener('load', () => {
@@ -1625,39 +1732,29 @@ class RadioApp {
                     logoImg.style.opacity = '1';
                 }, { once: true });
                 
-                if (useProxy && station.logo) {
-                    const originalLogoUrl = station.logo;
-                const proxies = [
-                    `https://corsproxy.io/?${encodeURIComponent(originalLogoUrl)}`,
-                    `https://api.allorigins.win/raw?url=${encodeURIComponent(originalLogoUrl)}`,
-                    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalLogoUrl)}`
-                ];
-                
-                let proxyIndex = 0;
+                // Error handler - try proxy, then placeholder
                 logoImg.addEventListener('error', function() {
-                        if (loadTimeout) clearTimeout(loadTimeout);
-                    proxyIndex++;
-                    if (proxyIndex < proxies.length) {
-                        // Try next proxy
-                        this.src = proxies[proxyIndex];
-                            loadTimeout = setTimeout(() => {
+                    if (loadTimeout) clearTimeout(loadTimeout);
+                    
+                    // Try proxy if we haven't already and have original URL
+                    if (!hasTriedProxy && originalLogoUrl && !this.src.includes('corsproxy.io') && !this.src.includes('data:image/svg+xml')) {
+                        hasTriedProxy = true;
+                        const proxyUrl = window.radioApp.getProxiedLogoUrl(originalLogoUrl);
+                        this.src = proxyUrl;
+                        
+                        // Set timeout for proxy attempt
+                        loadTimeout = setTimeout(() => {
+                            if (!this.complete || this.naturalWidth === 0) {
                                 this.src = window.radioApp.generatePlaceholderUrl(stationName);
-                            }, 1000);
+                            }
+                        }, 5000);
                     } else {
-                        // All proxies failed, use placeholder
-                        this.src = window.radioApp.generatePlaceholderUrl(stationName);
+                        // Already tried proxy or no original URL, use placeholder
+                        if (!this.src.includes('data:image/svg+xml')) {
+                            this.src = window.radioApp.generatePlaceholderUrl(stationName);
+                        }
                     }
-                    }, { once: false });
-                } else {
-                // Non-proxy logo error handler
-                logoImg.addEventListener('error', function() {
-                        if (loadTimeout) clearTimeout(loadTimeout);
-                    const stationName = this.getAttribute('data-station-name');
-                    if (stationName && !this.src.includes('data:image/svg+xml')) {
-                        this.src = window.radioApp.generatePlaceholderUrl(stationName);
-                    }
-                    }, { once: true });
-                }
+                }, { once: false });
             }
 
             // Favorite button handler
@@ -1715,7 +1812,7 @@ class RadioApp {
         
         // Preserve player state if in fullscreen, otherwise set to normal
         if (this.playerState !== 'fullscreen') {
-            this.setPlayerState('normal');
+        this.setPlayerState('normal');
         }
         
         // Resize player spectrum canvas when player becomes visible (only if not fullscreen)
@@ -1753,6 +1850,10 @@ class RadioApp {
         // Update bottom player UI
         document.getElementById('stationName').textContent = station.name;
         document.getElementById('stationGroup').textContent = station.group || '-';
+        const stationNameProgress = document.getElementById('stationNameProgress');
+        if (stationNameProgress) {
+            stationNameProgress.textContent = station.name;
+        }
         const logoImg = document.getElementById('stationLogo');
         let logoUrl = station.logo || '';
         let useProxy = false;
@@ -1773,28 +1874,65 @@ class RadioApp {
         }
         
         // Only use placeholder if logo is truly empty
-        if (!logoUrl || logoUrl === '' || logoUrl === 'undefined' || logoUrl === 'null') {
+        const originalLogoUrl = logoUrl && logoUrl !== '' && logoUrl !== 'undefined' && logoUrl !== 'null' ? logoUrl : null;
+        if (!originalLogoUrl) {
             logoUrl = this.generatePlaceholderUrl(station.name);
             useProxy = false;
-        } else if (useProxy) {
-            // Use proxy for the logo URL
-            logoUrl = this.getProxiedLogoUrl(logoUrl);
         }
+        // Try direct URL first, proxy will be fallback in error handler
         
-        // Optimize player logo loading
+        let hasTriedProxy = false;
+        
+        // Optimize player logo loading - try direct URL first
         logoImg.src = logoUrl;
         logoImg.setAttribute('referrerpolicy', 'no-referrer');
-        logoImg.setAttribute('crossorigin', 'anonymous');
         logoImg.setAttribute('decoding', 'async');
         logoImg.setAttribute('fetchpriority', 'high');
         logoImg.setAttribute('loading', 'eager'); // Player logo should load immediately
         
-        // Set timeout for player logo loading (1 second - faster for player)
+        // Update small logo in progress container
+        const logoImgSmall = document.getElementById('stationLogoSmall');
+        if (logoImgSmall) {
+            logoImgSmall.src = logoUrl;
+            logoImgSmall.setAttribute('referrerpolicy', 'no-referrer');
+            logoImgSmall.setAttribute('decoding', 'async');
+            logoImgSmall.setAttribute('fetchpriority', 'high');
+            logoImgSmall.setAttribute('loading', 'eager');
+        }
+        
+        // Set timeout for player logo loading (10 seconds)
         let playerLogoTimeout = setTimeout(() => {
             if (!logoImg.complete || logoImg.naturalWidth === 0) {
-                logoImg.src = this.generatePlaceholderUrl(station.name);
+                // Try proxy if we haven't already
+                if (originalLogoUrl && !hasTriedProxy && !logoImg.src.includes('corsproxy.io') && !logoImg.src.includes('data:image/svg+xml')) {
+                    hasTriedProxy = true;
+                    const proxyUrl = this.getProxiedLogoUrl(originalLogoUrl);
+                    logoImg.src = proxyUrl;
+                    if (logoImgSmall) logoImgSmall.src = proxyUrl;
+                    
+                    // Set timeout for proxy attempt
+                    playerLogoTimeout = setTimeout(() => {
+                        if (!logoImg.complete || logoImg.naturalWidth === 0) {
+                            const placeholder = this.generatePlaceholderUrl(station.name);
+                            logoImg.src = placeholder;
+                            if (logoImgSmall) logoImgSmall.src = placeholder;
+                        }
+                    }, 5000);
+                } else {
+                    // All attempts failed, use placeholder
+                    logoImg.src = this.generatePlaceholderUrl(station.name);
+                    if (logoImgSmall) logoImgSmall.src = this.generatePlaceholderUrl(station.name);
+                }
             }
-        }, 1000);
+            if (logoImgSmall && (!logoImgSmall.complete || logoImgSmall.naturalWidth === 0)) {
+                if (originalLogoUrl && !hasTriedProxy && !logoImgSmall.src.includes('corsproxy.io') && !logoImgSmall.src.includes('data:image/svg+xml')) {
+                    const proxyUrl = this.getProxiedLogoUrl(originalLogoUrl);
+                    logoImgSmall.src = proxyUrl;
+                } else {
+                    logoImgSmall.src = this.generatePlaceholderUrl(station.name);
+                }
+            }
+        }, 10000);
         
         // Clear timeout when image loads successfully
         logoImg.addEventListener('load', () => {
@@ -1802,38 +1940,46 @@ class RadioApp {
             logoImg.style.opacity = '1';
         }, { once: true });
         
-        // Error handler with proxy fallback
-        if (useProxy && station.logo) {
-            const originalLogoUrl = station.logo;
-            const proxies = [
-                `https://corsproxy.io/?${encodeURIComponent(originalLogoUrl)}`,
-                `https://api.allorigins.win/raw?url=${encodeURIComponent(originalLogoUrl)}`,
-                `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(originalLogoUrl)}`
-            ];
-            
-            let proxyIndex = 0;
-            logoImg.onerror = function() {
-                if (playerLogoTimeout) clearTimeout(playerLogoTimeout);
-                proxyIndex++;
-                if (proxyIndex < proxies.length) {
-                    // Try next proxy
-                    this.src = proxies[proxyIndex];
-                    playerLogoTimeout = setTimeout(() => {
-                        this.src = window.radioApp.generatePlaceholderUrl(station.name);
-                    }, 800);
-                } else {
-                    // All proxies failed, use placeholder
-                    this.src = window.radioApp.generatePlaceholderUrl(station.name);
-                }
-            };
-        } else {
-            logoImg.onerror = function() {
-                if (playerLogoTimeout) clearTimeout(playerLogoTimeout);
-                if (!this.src.includes('data:image/svg+xml')) {
-                    this.src = window.radioApp.generatePlaceholderUrl(station.name);
-                }
-            };
+        if (logoImgSmall) {
+            logoImgSmall.addEventListener('load', () => {
+                logoImgSmall.style.opacity = '1';
+            }, { once: true });
         }
+        
+        // Error handler - try proxy, then placeholder
+        const handleLogoError = function() {
+            if (playerLogoTimeout) clearTimeout(playerLogoTimeout);
+            
+            // Try proxy if we haven't already and have original URL
+            if (originalLogoUrl && !hasTriedProxy && !this.src.includes('corsproxy.io') && !this.src.includes('data:image/svg+xml')) {
+                hasTriedProxy = true;
+                const proxyUrl = window.radioApp.getProxiedLogoUrl(originalLogoUrl);
+                this.src = proxyUrl;
+                if (logoImgSmall && this === logoImg) logoImgSmall.src = proxyUrl;
+                else if (logoImgSmall && this === logoImgSmall) logoImg.src = proxyUrl;
+                
+                // Set timeout for proxy attempt
+                playerLogoTimeout = setTimeout(() => {
+                    if (!this.complete || this.naturalWidth === 0) {
+                        const placeholder = window.radioApp.generatePlaceholderUrl(station.name);
+                        this.src = placeholder;
+                        if (logoImgSmall && this === logoImg) logoImgSmall.src = placeholder;
+                        else if (logoImgSmall && this === logoImgSmall) logoImg.src = placeholder;
+                    }
+                }, 5000);
+            } else {
+                // Already tried proxy or no original URL, use placeholder
+                if (!this.src.includes('data:image/svg+xml')) {
+                    const placeholder = window.radioApp.generatePlaceholderUrl(station.name);
+                    this.src = placeholder;
+                    if (logoImgSmall && this === logoImg) logoImgSmall.src = placeholder;
+                    else if (logoImgSmall && this === logoImgSmall) logoImg.src = placeholder;
+                }
+            }
+        };
+        
+        logoImg.onerror = handleLogoError;
+        if (logoImgSmall) logoImgSmall.onerror = handleLogoError;
 
         // Update playing state on channel items
         document.querySelectorAll('.channel-item').forEach(item => {
@@ -1948,6 +2094,39 @@ class RadioApp {
         }
         this.playPauseBtn.disabled = false;
         this.playPauseBtn.style.opacity = '1';
+    }
+    
+    formatTime(seconds) {
+        if (!isFinite(seconds) || isNaN(seconds)) {
+            return '0:00';
+        }
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    updateProgressBar() {
+        if (!this.playerProgressFill || !this.playerTimeCurrent || !this.playerTimeDuration) {
+            return;
+        }
+        
+        const currentTime = this.audio.currentTime || 0;
+        const duration = this.audio.duration || 0;
+        
+        // Update time displays
+        this.playerTimeCurrent.textContent = this.formatTime(currentTime);
+        
+        if (duration && isFinite(duration)) {
+            this.playerTimeDuration.textContent = this.formatTime(duration);
+            
+            // Update progress bar
+            const progress = (currentTime / duration) * 100;
+            this.playerProgressFill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+        } else {
+            // Live stream or duration not available
+            this.playerTimeDuration.textContent = '∞';
+            this.playerProgressFill.style.width = '0%';
+        }
     }
     
     findNextWorkingStation() {
@@ -2125,22 +2304,22 @@ class RadioApp {
         volumeButtons.forEach(volumeBtn => {
             const volumeIcon = volumeBtn.querySelector('svg');
             if (volumeIcon) {
-                if (value === 0) {
-                    volumeIcon.innerHTML = `
-                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                        <line x1="23" y1="9" x2="17" y2="15"></line>
-                        <line x1="17" y1="9" x2="23" y2="15"></line>
-                    `;
-                } else if (value < 0.5) {
-                    volumeIcon.innerHTML = `
-                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                    `;
-                } else {
-                    volumeIcon.innerHTML = `
-                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                    `;
-                }
+        if (value === 0) {
+            volumeIcon.innerHTML = `
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <line x1="23" y1="9" x2="17" y2="15"></line>
+                <line x1="17" y1="9" x2="23" y2="15"></line>
+            `;
+        } else if (value < 0.5) {
+            volumeIcon.innerHTML = `
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            `;
+        } else {
+            volumeIcon.innerHTML = `
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            `;
+        }
             }
         });
     }
