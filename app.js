@@ -122,9 +122,9 @@ class RadioApp {
     loadViewMode() {
         try {
             const stored = localStorage.getItem('plusRadio_viewMode');
-            return stored || 'normal'; // 'compact', 'normal', 'grid'
+            return stored || 'compact'; // 'compact', 'normal', 'grid'
         } catch (e) {
-            return 'normal';
+            return 'compact';
         }
     }
     
@@ -325,13 +325,13 @@ class RadioApp {
     }
     
     toggleViewMode() {
-        // Cycle through: normal -> compact -> grid -> normal
-        if (this.viewMode === 'normal') {
-            this.viewMode = 'compact';
-        } else if (this.viewMode === 'compact') {
+        // Cycle through: compact -> grid -> normal -> compact
+        if (this.viewMode === 'compact') {
             this.viewMode = 'grid';
-        } else {
+        } else if (this.viewMode === 'grid') {
             this.viewMode = 'normal';
+        } else {
+            this.viewMode = 'compact';
         }
         this.saveViewMode();
         this.updateViewModeIcon();
