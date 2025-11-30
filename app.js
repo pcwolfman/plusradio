@@ -58,6 +58,7 @@ class RadioApp {
         this.lastTapTime = 0;
         this.tapTimeout = null;
         this.spectrumStyle = this.loadSpectrumStyle(); // 'style1', 'style2', or 'style3'
+        this.fireworksParticles = []; // For style3 fireworks effect
         
         // Check online status and setup listeners
         this.checkOnlineStatus();
@@ -147,11 +148,15 @@ class RadioApp {
     
     toggleSpectrumStyle() {
         console.log('toggleSpectrumStyle called, current:', this.spectrumStyle);
-        // Cycle through: style1 -> style2 -> style3 -> style1
+        // Cycle through: style1 -> style2 -> style3 -> style4 -> style5 -> style1
         if (this.spectrumStyle === 'style1') {
             this.spectrumStyle = 'style2';
         } else if (this.spectrumStyle === 'style2') {
             this.spectrumStyle = 'style3';
+        } else if (this.spectrumStyle === 'style3') {
+            this.spectrumStyle = 'style4';
+        } else if (this.spectrumStyle === 'style4') {
+            this.spectrumStyle = 'style5';
         } else {
             this.spectrumStyle = 'style1';
         }
@@ -187,7 +192,7 @@ class RadioApp {
             if (this.spectrumStyle === 'style2') {
                 styleName = 'Rengarenk';
             } else if (this.spectrumStyle === 'style3') {
-                styleName = 'Dairesel';
+                styleName = 'Esrarengiz';
             }
             this.spectrumStyleToggle.title = `Spektrum Stili: ${styleName} (Tıkla ile değiştir)`;
             
@@ -912,146 +917,398 @@ class RadioApp {
                     x += barWidth;
                 }
             } else if (this.spectrumStyle === 'style3') {
-                // Style 3: Modern circular spectrum with sleek design
+                // Style 3: Esrarengiz Havai Fişek & Şimşek Bass - Mysterious Fireworks & Lightning Bass
                 const centerX = width / 2;
                 const centerY = height / 2;
-                const baseRadius = Math.min(width, height) * 0.25;
-                const maxBarLength = Math.min(width, height) * 0.2;
+                const barWidth = width / barCount * 2.5;
+                const time = Date.now() * 0.001;
                 
-                // Draw modern bars - both inward and outward
-                for (let i = 0; i < barCount; i++) {
-                    const dataValue = this.dataArray[i];
-                    const angle = (i / barCount) * Math.PI * 2 - Math.PI / 2;
+                // Initialize fireworks particles if not exists
+                if (!this.fireworksParticles) {
+                    this.fireworksParticles = [];
+                }
+                
+                // Bass detection - use lower frequencies (first 20% of bars)
+                const bassBars = Math.floor(barCount * 0.2);
+                let bassIntensity = 0;
+                for (let i = 0; i < bassBars; i++) {
+                    bassIntensity += this.dataArray[i] / 255;
+                }
+                bassIntensity = bassIntensity / bassBars;
+                
+                // Create new fireworks on strong bass hits
+                if (bassIntensity > 0.7 && Math.random() < 0.15) {
+                    const fireworkX = Math.random() * width;
+                    const fireworkY = Math.random() * height * 0.5; // Upper half
+                    const colors = [
+                        { h: 0, s: 100, l: 60 },    // Red
+                        { h: 30, s: 100, l: 65 },    // Orange
+                        { h: 60, s: 100, l: 70 },    // Yellow
+                        { h: 180, s: 100, l: 70 },   // Cyan
+                        { h: 240, s: 100, l: 65 },   // Blue
+                        { h: 280, s: 100, l: 60 },   // Purple
+                        { h: 320, s: 100, l: 65 },   // Magenta
+                    ];
+                    const color = colors[Math.floor(Math.random() * colors.length)];
                     
-                    // Smooth bar length with easing
-                    const normalizedValue = dataValue / 255;
-                    const currentBarLength = normalizedValue * maxBarLength;
-                    
-                    if (currentBarLength < 0.5) continue;
-                    
-                    // Modern color scheme - vibrant but elegant
-                    const hue = (i / barCount) * 360;
-                    const saturation = 75 + normalizedValue * 20;
-                    const lightness = 55 + normalizedValue * 20;
-                    
-                    // Calculate positions for bidirectional bars
-                    const innerStartX = centerX + Math.cos(angle) * (baseRadius - currentBarLength * 0.3);
-                    const innerStartY = centerY + Math.sin(angle) * (baseRadius - currentBarLength * 0.3);
-                    const outerEndX = centerX + Math.cos(angle) * (baseRadius + currentBarLength);
-                    const outerEndY = centerY + Math.sin(angle) * (baseRadius + currentBarLength);
-                    
-                    // Draw outer bar (extending outward)
-                    const outerGradient = ctx.createLinearGradient(
-                        centerX + Math.cos(angle) * baseRadius,
-                        centerY + Math.sin(angle) * baseRadius,
-                        outerEndX, outerEndY
-                    );
-                    outerGradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness}%, 0.8)`);
-                    outerGradient.addColorStop(0.5, `hsla(${hue}, ${saturation}%, ${lightness + 15}%, 1)`);
-                    outerGradient.addColorStop(1, `hsla(${hue}, ${saturation}%, ${lightness + 25}%, 0.9)`);
-                    
-                    ctx.strokeStyle = outerGradient;
-                    ctx.lineWidth = 2.5;
-                    ctx.lineCap = 'round';
-                    ctx.shadowBlur = 12;
-                    ctx.shadowColor = `hsla(${hue}, ${saturation}%, ${lightness + 10}%, 0.8)`;
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(centerX + Math.cos(angle) * baseRadius, centerY + Math.sin(angle) * baseRadius);
-                    ctx.lineTo(outerEndX, outerEndY);
-                    ctx.stroke();
-                    
-                    // Draw inner bar (extending inward) - shorter and more subtle
-                    if (normalizedValue > 0.3) {
-                        const innerLength = currentBarLength * 0.4;
-                        const innerEndX = centerX + Math.cos(angle) * (baseRadius - innerLength);
-                        const innerEndY = centerY + Math.sin(angle) * (baseRadius - innerLength);
-                        
-                        const innerGradient = ctx.createLinearGradient(
-                            centerX + Math.cos(angle) * baseRadius,
-                            centerY + Math.sin(angle) * baseRadius,
-                            innerEndX, innerEndY
-                        );
-                        innerGradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness}%, 0.6)`);
-                        innerGradient.addColorStop(1, `hsla(${hue}, ${saturation}%, ${lightness - 10}%, 0.4)`);
-                        
-                        ctx.strokeStyle = innerGradient;
-                        ctx.lineWidth = 1.5;
-                        ctx.shadowBlur = 6;
-                        
-                        ctx.beginPath();
-                        ctx.moveTo(centerX + Math.cos(angle) * baseRadius, centerY + Math.sin(angle) * baseRadius);
-                        ctx.lineTo(innerEndX, innerEndY);
-                        ctx.stroke();
-                    }
-                    
-                    ctx.shadowBlur = 0;
-                    
-                    // Modern particle effects - smooth trails
-                    if (dataValue > 60) {
-                        const trailCount = Math.min(8, Math.floor(dataValue / 30));
-                        for (let t = 0; t < trailCount; t++) {
-                            const trailProgress = (t / trailCount) * 0.7;
-                            const trailX = outerEndX - (outerEndX - centerX) * trailProgress;
-                            const trailY = outerEndY - (outerEndY - centerY) * trailProgress;
-                            
-                            const trailSize = 1.5 + normalizedValue * 2;
-                            const trailAlpha = (0.7 - trailProgress) * normalizedValue;
-                            
-                            ctx.fillStyle = `hsla(${hue}, ${saturation}%, ${lightness + 20}%, ${trailAlpha})`;
-                            ctx.shadowBlur = 6;
-                            ctx.shadowColor = `hsla(${hue}, ${saturation}%, ${lightness + 15}%, 0.6)`;
-                            
-                            ctx.beginPath();
-                            ctx.arc(trailX, trailY, trailSize, 0, Math.PI * 2);
-                            ctx.fill();
-                            
-                            ctx.shadowBlur = 0;
-                        }
+                    // Create particle explosion
+                    const particleCount = 20 + Math.floor(Math.random() * 30);
+                    for (let p = 0; p < particleCount; p++) {
+                        const angle = (p / particleCount) * Math.PI * 2;
+                        const speed = 2 + Math.random() * 4;
+                        this.fireworksParticles.push({
+                            x: fireworkX,
+                            y: fireworkY,
+                            vx: Math.cos(angle) * speed,
+                            vy: Math.sin(angle) * speed,
+                            life: 1.0,
+                            decay: 0.01 + Math.random() * 0.02,
+                            size: 2 + Math.random() * 4,
+                            color: color,
+                            trail: []
+                        });
                     }
                 }
                 
-                // Modern center design - multi-layered with smooth pulse
+                // Update and draw fireworks particles
+                for (let i = this.fireworksParticles.length - 1; i >= 0; i--) {
+                    const p = this.fireworksParticles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.15; // Gravity
+                    p.life -= p.decay;
+                    
+                    // Add to trail
+                    p.trail.push({ x: p.x, y: p.y, life: p.life });
+                    if (p.trail.length > 8) {
+                        p.trail.shift();
+                    }
+                    
+                    // Draw trail
+                    for (let t = 0; t < p.trail.length; t++) {
+                        const trailPoint = p.trail[t];
+                        const trailAlpha = (trailPoint.life / p.trail.length) * p.life * 0.6;
+                        ctx.fillStyle = `hsla(${p.color.h}, ${p.color.s}%, ${p.color.l}%, ${trailAlpha})`;
+                        ctx.shadowBlur = 8;
+                        ctx.shadowColor = `hsla(${p.color.h}, ${p.color.s}%, ${p.color.l + 20}%, 0.8)`;
+                        ctx.beginPath();
+                        ctx.arc(trailPoint.x, trailPoint.y, p.size * 0.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    
+                    // Draw particle
+                    ctx.fillStyle = `hsla(${p.color.h}, ${p.color.s}%, ${p.color.l}%, ${p.life})`;
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = `hsla(${p.color.h}, ${p.color.s}%, ${p.color.l + 25}%, 0.9)`;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                    
+                    // Remove dead particles
+                    if (p.life <= 0 || p.y > height + 50) {
+                        this.fireworksParticles.splice(i, 1);
+                    }
+                }
+                
+                // Draw lightning effects on strong bass
+                if (bassIntensity > 0.6) {
+                    const lightningCount = Math.floor(bassIntensity * 3);
+                    for (let l = 0; l < lightningCount; l++) {
+                        const startX = Math.random() * width;
+                        const startY = 0;
+                        const endX = startX + (Math.random() - 0.5) * width * 0.3;
+                        const endY = height * (0.3 + Math.random() * 0.4);
+                        
+                        // Draw lightning bolt
+                        ctx.strokeStyle = `hsla(200, 100%, 80%, ${0.7 * bassIntensity})`;
+                        ctx.lineWidth = 2 + bassIntensity * 3;
+                        ctx.shadowBlur = 20;
+                        ctx.shadowColor = 'hsla(200, 100%, 90%, 0.9)';
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(startX, startY);
+                        
+                        // Zigzag lightning path
+                        let currentX = startX;
+                        let currentY = startY;
+                        const segments = 8;
+                        for (let s = 1; s <= segments; s++) {
+                            const progress = s / segments;
+                            currentX = startX + (endX - startX) * progress + (Math.random() - 0.5) * 20;
+                            currentY = startY + (endY - startY) * progress;
+                            ctx.lineTo(currentX, currentY);
+                        }
+                        ctx.lineTo(endX, endY);
+                        ctx.stroke();
+                        ctx.shadowBlur = 0;
+                        
+                        // Lightning glow
+                        ctx.strokeStyle = `hsla(200, 100%, 90%, ${0.4 * bassIntensity})`;
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                    }
+                }
+                
+                // Draw bass bars with mysterious glow
+                let x = 0;
+                for (let i = 0; i < barCount; i++) {
+                    const dataValue = this.dataArray[i];
+                    const normalizedValue = dataValue / 255;
+                    const barHeight = normalizedValue * height * 0.45;
+                    
+                    if (barHeight < 0.5) {
+                        x += barWidth;
+                        continue;
+                    }
+                    
+                    // Mysterious color scheme - dark purple to electric blue
+                    const isBass = i < bassBars;
+                    const hue = isBass ? 280 + (bassIntensity * 40) : 200 + (i / barCount) * 60;
+                    const saturation = isBass ? 90 + bassIntensity * 10 : 70 + normalizedValue * 20;
+                    const lightness = isBass ? 50 + bassIntensity * 20 : 55 + normalizedValue * 15;
+                    
+                    // Create mysterious gradient
+                    const gradient = ctx.createLinearGradient(
+                        x, centerY - barHeight,
+                        x + barWidth, centerY + barHeight
+                    );
+                    
+                    // Esrarengiz renk geçişi
+                    gradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness + 20}%, 0.9)`);
+                    gradient.addColorStop(0.3, `hsla(${hue + 20}, ${saturation}%, ${lightness + 25}%, 1)`);
+                    gradient.addColorStop(0.5, `hsla(${hue}, ${saturation}%, ${lightness + 30}%, 0.95)`);
+                    gradient.addColorStop(0.7, `hsla(${hue - 20}, ${saturation}%, ${lightness + 25}%, 1)`);
+                    gradient.addColorStop(1, `hsla(${hue}, ${saturation}%, ${lightness + 20}%, 0.9)`);
+                    
+                    // Draw top bar
+                    ctx.fillStyle = gradient;
+                    ctx.shadowBlur = isBass ? 25 : 15;
+                    ctx.shadowColor = `hsla(${hue}, ${saturation}%, ${lightness + 30}%, 0.8)`;
+                    ctx.fillRect(x, centerY - barHeight, barWidth - 1, barHeight);
+                    
+                    // Draw bottom bar
+                    ctx.fillRect(x, centerY, barWidth - 1, barHeight);
+                    ctx.shadowBlur = 0;
+                    
+                    // Add mysterious sparkles on high frequencies
+                    if (normalizedValue > 0.7 && !isBass) {
+                        const sparkleCount = Math.floor(normalizedValue * 3);
+                        for (let s = 0; s < sparkleCount; s++) {
+                            const sparkleX = x + Math.random() * barWidth;
+                            const sparkleY = centerY - barHeight - 5 - Math.random() * 10;
+                            const sparkleSize = 1 + Math.random() * 2;
+                            const sparkleAlpha = normalizedValue * 0.9;
+                            
+                            ctx.fillStyle = `hsla(${hue + s * 30}, ${saturation}%, ${lightness + 35}%, ${sparkleAlpha})`;
+                            ctx.shadowBlur = 10;
+                            ctx.shadowColor = `hsla(${hue}, ${saturation}%, ${lightness + 40}%, 0.8)`;
+                            ctx.beginPath();
+                            ctx.arc(sparkleX, sparkleY, sparkleSize, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.shadowBlur = 0;
+                        }
+                    }
+                    
+                    // Bass pulse effect
+                    if (isBass && bassIntensity > 0.5) {
+                        const pulseSize = bassIntensity * 15;
+                        const pulseAlpha = bassIntensity * 0.4;
+                        ctx.strokeStyle = `hsla(${hue}, ${saturation}%, ${lightness + 30}%, ${pulseAlpha})`;
+                        ctx.lineWidth = 2;
+                        ctx.shadowBlur = 20;
+                        ctx.shadowColor = `hsla(${hue}, ${saturation}%, ${lightness + 35}%, 0.6)`;
+                        ctx.beginPath();
+                        ctx.arc(x + barWidth / 2, centerY, pulseSize, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.shadowBlur = 0;
+                    }
+                    
+                    x += barWidth;
+                }
+                
+                // Mysterious center orb
                 const maxData = Math.max(...Array.from(this.dataArray));
                 const pulseIntensity = (maxData / 255);
+                const orbRadius = 8 + pulseIntensity * 20;
+                const orbGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, orbRadius);
+                orbGradient.addColorStop(0, `hsla(280, 100%, 70%, ${0.8 + pulseIntensity * 0.2})`);
+                orbGradient.addColorStop(0.4, `hsla(240, 100%, 60%, ${0.6 + pulseIntensity * 0.3})`);
+                orbGradient.addColorStop(0.7, `hsla(200, 90%, 55%, ${0.4 + pulseIntensity * 0.2})`);
+                orbGradient.addColorStop(1, `hsla(280, 80%, 50%, 0)`);
                 
-                // Outer glow ring
-                const ringRadius = baseRadius * 0.6 + pulseIntensity * 8;
-                const ringGradient = ctx.createRadialGradient(centerX, centerY, ringRadius - 3, centerX, centerY, ringRadius + 3);
-                ringGradient.addColorStop(0, `hsla(200, 80%, 60%, ${0.3 + pulseIntensity * 0.3})`);
-                ringGradient.addColorStop(1, `hsla(250, 80%, 50%, 0)`);
-                
-                ctx.strokeStyle = ringGradient;
-                ctx.lineWidth = 2;
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = 'hsla(200, 80%, 60%, 0.6)';
+                ctx.fillStyle = orbGradient;
+                ctx.shadowBlur = 30;
+                ctx.shadowColor = 'hsla(280, 100%, 70%, 0.9)';
                 ctx.beginPath();
-                ctx.arc(centerX, centerY, ringRadius, 0, Math.PI * 2);
-                ctx.stroke();
-                ctx.shadowBlur = 0;
-                
-                // Center core - modern gradient
-                const coreRadius = 6 + pulseIntensity * 12;
-                const coreGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, coreRadius);
-                coreGradient.addColorStop(0, `hsla(200, 100%, 70%, ${0.9 + pulseIntensity * 0.1})`);
-                coreGradient.addColorStop(0.4, `hsla(240, 100%, 60%, ${0.7 + pulseIntensity * 0.2})`);
-                coreGradient.addColorStop(0.7, `hsla(280, 90%, 55%, ${0.4 + pulseIntensity * 0.2})`);
-                coreGradient.addColorStop(1, `hsla(300, 80%, 50%, 0)`);
-                
-                ctx.fillStyle = coreGradient;
-                ctx.shadowBlur = 25;
-                ctx.shadowColor = 'hsla(200, 100%, 70%, 0.9)';
-                ctx.beginPath();
-                ctx.arc(centerX, centerY, coreRadius, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // Inner highlight
-                ctx.fillStyle = `hsla(200, 100%, 85%, ${0.6 + pulseIntensity * 0.3})`;
-                ctx.shadowBlur = 10;
-                ctx.beginPath();
-                ctx.arc(centerX, centerY, coreRadius * 0.4, 0, Math.PI * 2);
+                ctx.arc(centerX, centerY, orbRadius, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.shadowBlur = 0;
+            } else if (this.spectrumStyle === 'style4') {
+                // Style 4: Neon Wave Spectrum - Smooth flowing waves with neon glow
+                const barWidth = width / barCount * 2.5;
+                const centerY = height / 2;
+                let x = 0;
+                
+                // Create smooth wave effect
+                const waveOffset = Date.now() * 0.001;
+                
+                for (let i = 0; i < barCount; i++) {
+                    const dataValue = this.dataArray[i];
+                    const normalizedValue = dataValue / 255;
+                    const barHeight = normalizedValue * height * 0.45;
+                    
+                    if (barHeight < 0.5) {
+                        x += barWidth;
+                        continue;
+                    }
+                    
+                    // Neon color scheme - vibrant cyan to purple
+                    const hue = 180 + (i / barCount) * 120; // Cyan to Purple
+                    const saturation = 85 + normalizedValue * 15;
+                    const lightness = 50 + normalizedValue * 20;
+                    
+                    // Wave effect with smooth curves
+                    const wavePhase = (i / barCount) * Math.PI * 4 + waveOffset;
+                    const waveAmplitude = Math.sin(wavePhase) * 3;
+                    
+                    // Top bar (going up from center)
+                    const topY = centerY - barHeight - waveAmplitude;
+                    const bottomY = centerY + barHeight + waveAmplitude;
+                    
+                    // Create neon gradient
+                    const topGradient = ctx.createLinearGradient(x, topY, x + barWidth, topY + barHeight);
+                    topGradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness + 20}%, 0.9)`);
+                    topGradient.addColorStop(0.5, `hsla(${hue + 20}, ${saturation}%, ${lightness + 30}%, 1)`);
+                    topGradient.addColorStop(1, `hsla(${hue}, ${saturation}%, ${lightness + 15}%, 0.8)`);
+                    
+                    const bottomGradient = ctx.createLinearGradient(x, bottomY - barHeight, x + barWidth, bottomY);
+                    bottomGradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness + 20}%, 0.9)`);
+                    bottomGradient.addColorStop(0.5, `hsla(${hue + 20}, ${saturation}%, ${lightness + 30}%, 1)`);
+                    bottomGradient.addColorStop(1, `hsla(${hue}, ${saturation}%, ${lightness + 15}%, 0.8)`);
+                    
+                    // Draw top bar with neon glow
+                    ctx.fillStyle = topGradient;
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = `hsla(${hue}, ${saturation}%, ${lightness + 25}%, 0.9)`;
+                    ctx.fillRect(x, topY, barWidth - 1, barHeight);
+                    
+                    // Draw bottom bar with neon glow
+                    ctx.fillStyle = bottomGradient;
+                    ctx.fillRect(x, bottomY - barHeight, barWidth - 1, barHeight);
+                    ctx.shadowBlur = 0;
+                    
+                    // Add connecting line in center with neon effect
+                    const centerX = x + barWidth / 2;
+                    ctx.strokeStyle = `hsla(${hue}, ${saturation}%, ${lightness + 30}%, 0.7)`;
+                    ctx.lineWidth = 1.5;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = `hsla(${hue}, ${saturation}%, ${lightness + 25}%, 0.8)`;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, topY + barHeight);
+                    ctx.lineTo(centerX, bottomY - barHeight);
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                    
+                    // Add floating particles for high frequencies
+                    if (normalizedValue > 0.6) {
+                        const particleCount = Math.floor(normalizedValue * 5);
+                        for (let p = 0; p < particleCount; p++) {
+                            const particleX = x + (p / particleCount) * barWidth;
+                            const particleY = topY - 5 - Math.random() * 10;
+                            const particleSize = 1 + normalizedValue * 2;
+                            const particleAlpha = normalizedValue * 0.8;
+                            
+                            ctx.fillStyle = `hsla(${hue + p * 10}, ${saturation}%, ${lightness + 30}%, ${particleAlpha})`;
+                            ctx.shadowBlur = 8;
+                            ctx.shadowColor = `hsla(${hue}, ${saturation}%, ${lightness + 25}%, 0.6)`;
+                            ctx.beginPath();
+                            ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.shadowBlur = 0;
+                        }
+                    }
+                    
+                    x += barWidth;
+                }
+            } else if (this.spectrumStyle === 'style5') {
+                // Style 5: Modern Minimal - Clean design with soft color transitions
+                const barWidth = width / barCount * 2.5;
+                const centerY = height / 2;
+                let x = 0;
+                
+                // Soft color palette: Purple -> Blue -> Cyan -> Green
+                const colorStops = [
+                    { h: 280, s: 70, l: 60 },  // Purple
+                    { h: 240, s: 75, l: 65 },  // Blue
+                    { h: 200, s: 80, l: 70 },  // Cyan
+                    { h: 160, s: 75, l: 65 },  // Green
+                ];
+                
+                for (let i = 0; i < barCount; i++) {
+                    const dataValue = this.dataArray[i];
+                    const normalizedValue = dataValue / 255;
+                    const barHeight = normalizedValue * height * 0.4;
+                    
+                    if (barHeight < 0.5) {
+                        x += barWidth;
+                        continue;
+                    }
+                    
+                    // Smooth color transition across spectrum
+                    const colorIndex = (i / barCount) * (colorStops.length - 1);
+                    const colorIndex1 = Math.floor(colorIndex);
+                    const colorIndex2 = Math.min(Math.ceil(colorIndex), colorStops.length - 1);
+                    const colorBlend = colorIndex - colorIndex1;
+                    
+                    const color1 = colorStops[colorIndex1];
+                    const color2 = colorStops[colorIndex2];
+                    
+                    const hue = color1.h + (color2.h - color1.h) * colorBlend;
+                    const saturation = color1.s + (color2.s - color1.s) * colorBlend;
+                    const lightness = color1.l + (color2.l - color1.l) * colorBlend;
+                    
+                    // Create soft gradient
+                    const centerX = x + barWidth / 2;
+                    const topGradient = ctx.createLinearGradient(
+                        centerX, centerY - barHeight,
+                        centerX, centerY
+                    );
+                    topGradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness + 15}%, 0.85)`);
+                    topGradient.addColorStop(1, `hsla(${hue}, ${saturation}%, ${lightness}%, 0.6)`);
+                    
+                    const bottomGradient = ctx.createLinearGradient(
+                        centerX, centerY,
+                        centerX, centerY + barHeight
+                    );
+                    bottomGradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness}%, 0.6)`);
+                    bottomGradient.addColorStop(1, `hsla(${hue}, ${saturation}%, ${lightness + 15}%, 0.85)`);
+                    
+                    // Draw centered bars with subtle glow
+                    ctx.fillStyle = topGradient;
+                    ctx.shadowBlur = 8;
+                    ctx.shadowColor = `hsla(${hue}, ${saturation}%, ${lightness + 10}%, 0.5)`;
+                    ctx.fillRect(x, centerY - barHeight, barWidth - 1, barHeight);
+                    
+                    ctx.fillStyle = bottomGradient;
+                    ctx.fillRect(x, centerY, barWidth - 1, barHeight);
+                    ctx.shadowBlur = 0;
+                    
+                    // Add subtle connecting line
+                    ctx.strokeStyle = `hsla(${hue}, ${saturation}%, ${lightness + 20}%, 0.4)`;
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY - barHeight);
+                    ctx.lineTo(centerX, centerY + barHeight);
+                    ctx.stroke();
+                    
+                    // Add minimal highlight on top
+                    ctx.fillStyle = `hsla(${hue}, ${saturation}%, ${lightness + 25}%, 0.3)`;
+                    ctx.fillRect(x, centerY - barHeight, barWidth - 1, Math.max(1, barHeight * 0.08));
+                    ctx.fillRect(x, centerY, barWidth - 1, Math.max(1, barHeight * 0.08));
+                    
+                    x += barWidth;
+                }
             }
             
             this.playerSpectrumAnimationId = requestAnimationFrame(draw);
@@ -1132,7 +1389,10 @@ class RadioApp {
         }
 
         if (this.spectrumStyleToggleFullscreen) {
-            this.spectrumStyleToggleFullscreen.addEventListener('click', () => {
+            this.spectrumStyleToggleFullscreen.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                // Toggle spectrum style in both normal and fullscreen modes
                 this.toggleSpectrumStyle();
             });
         }
@@ -1287,14 +1547,56 @@ class RadioApp {
             });
         }
 
-        // Spectrum canvas tap controls
+        // Spectrum canvas tap controls - STRONG event listeners to ensure fullscreen return works
         if (this.playerSpectrumCanvas) {
             const spectrumWrapper = this.playerSpectrumCanvas.parentElement;
             if (spectrumWrapper) {
+                // Add event listener to wrapper with capture phase
                 spectrumWrapper.addEventListener('click', (e) => {
+                    // Don't handle if clicking on buttons
+                    if (e.target.closest('.player-btn') || 
+                        e.target.closest('button') ||
+                        e.target.closest('.player-navigation-controls')) {
+                        return;
+                    }
+                    
+                    // In fullscreen mode, immediately return to home - THIS IS CRITICAL
+                    if (this.playerState === 'fullscreen') {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        console.log('Fullscreen mode (wrapper) - returning to home page');
+                        this.returnToHomePage();
+                        return false;
+                    }
+                    
+                    // Handle spectrum tap for normal mode
+                    this.handleSpectrumTap(e);
+                }, true); // Capture phase - handles before other listeners
+            }
+            
+            // Also add direct listener to canvas as backup - CRITICAL for fullscreen
+            this.playerSpectrumCanvas.addEventListener('click', (e) => {
+                // Don't handle if clicking on buttons
+                if (e.target.closest('.player-btn') || 
+                    e.target.closest('button') ||
+                    e.target.closest('.player-navigation-controls')) {
+                    return;
+                }
+                
+                // In fullscreen mode, immediately return to home - THIS IS CRITICAL
+                if (this.playerState === 'fullscreen') {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    console.log('Fullscreen mode (canvas) - returning to home page');
+                    this.returnToHomePage();
+                    return false;
+                }
+                
+                // Handle spectrum tap for normal mode
                 this.handleSpectrumTap(e);
-            });
-        }
+            }, true); // Capture phase
         }
         
         // Spectrum style toggle button - multiple approaches to ensure it works
@@ -1309,6 +1611,7 @@ class RadioApp {
                     e.stopPropagation();
                     e.preventDefault();
                     console.log('=== SPECTRUM TOGGLE CLICKED ===');
+                    // Toggle spectrum style in both normal and fullscreen modes
                     this.toggleSpectrumStyle();
                     return false;
                 };
@@ -1332,6 +1635,7 @@ class RadioApp {
                             e.stopPropagation();
                             e.preventDefault();
                             console.log('=== SPECTRUM TOGGLE CLICKED (delegation) ===');
+                            // Toggle spectrum style in both normal and fullscreen modes
                             this.toggleSpectrumStyle();
                         }
                     }, true);
@@ -1354,32 +1658,29 @@ class RadioApp {
         setTimeout(setupSpectrumToggle, 500);
         setTimeout(setupSpectrumToggle, 1000);
         
-        // Bottom player tap controls (butonlar hariç)
+        // Bottom player tap controls - only handle non-button, non-spectrum clicks
+        // Spectrum clicks are handled by spectrumWrapper listener above (capture phase)
         if (this.bottomPlayer) {
             this.bottomPlayer.addEventListener('click', (e) => {
-                // Spectrum style toggle butonunu önce kontrol et
-                if (e.target.id === 'spectrumStyleToggle' || 
-                    e.target.closest('#spectrumStyleToggle') ||
-                    e.target.closest('.spectrum-style-toggle')) {
-                    return; // Let the button handle its own click
-                }
-                
-                // Butonlara, inputlara veya kontrollere tıklanmışsa işlem yapma
+                // Don't handle button clicks
                 if (e.target.closest('.player-btn') || 
                     e.target.closest('.player-controls') ||
                     e.target.closest('.volume-control') ||
                     e.target.closest('.volume-slider') ||
                     e.target.closest('input') ||
-                    e.target.closest('button')) {
+                    e.target.closest('button') ||
+                    e.target.closest('.player-navigation-controls')) {
                     return;
                 }
                 
-                // Spektrum canvas'a tıklanmışsa zaten handleSpectrumTap çalışacak
-                if (e.target === this.playerSpectrumCanvas || e.target.closest('.player-spectrum-wrapper')) {
+                // Don't handle spectrum clicks (handled by spectrumWrapper listener in capture phase)
+                if (e.target === this.playerSpectrumCanvas || 
+                    e.target.closest('.player-spectrum-wrapper') ||
+                    e.target.closest('.player-spectrum-canvas')) {
                     return;
                 }
                 
-                // Diğer alanlara tıklanmışsa aynı işlevi yap
+                // For other areas in player, handle tap
                 this.handleSpectrumTap(e);
             });
         }
@@ -1396,41 +1697,202 @@ class RadioApp {
     }
     
     handleSpectrumTap(e) {
-        const currentTime = Date.now();
-        const timeSinceLastTap = currentTime - this.lastTapTime;
-        
-        // Clear any pending single tap timeout
-        if (this.tapTimeout) {
-            clearTimeout(this.tapTimeout);
-            this.tapTimeout = null;
-        }
-        
-        // If fullscreen, single tap returns to normal
+        // If fullscreen, single tap returns directly to home page (anasayfa)
         if (this.playerState === 'fullscreen') {
-            this.setPlayerState('normal');
-            this.lastTapTime = 0;
+            if (e) {
+                e.stopPropagation();
+                e.preventDefault();
+            }
+            this.returnToHomePage();
             return;
         }
         
-        // Check for double tap (within 300ms)
-        if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
-            // Double tap - go to fullscreen
+        // In normal mode, single tap goes to fullscreen (büyük stil)
+        if (this.playerState === 'normal') {
+            if (e) {
+                e.stopPropagation();
+                e.preventDefault();
+            }
             this.setPlayerState('fullscreen');
-            this.lastTapTime = 0;
-        } else {
-            // Single tap - wait to see if it's a double tap
-            this.lastTapTime = currentTime;
-            this.tapTimeout = setTimeout(() => {
-                // Single tap - minimize
-                if (this.playerState === 'normal') {
-                    this.setPlayerState('minimized');
-                } else if (this.playerState === 'minimized') {
-                    this.setPlayerState('normal');
-                }
-                this.lastTapTime = 0;
-                this.tapTimeout = null;
-            }, 300);
+            return;
         }
+        
+        // In minimized mode, single tap goes to normal
+        if (this.playerState === 'minimized') {
+            if (e) {
+                e.stopPropagation();
+                e.preventDefault();
+            }
+            this.setPlayerState('normal');
+            return;
+        }
+    }
+    
+    returnToHomePage() {
+        // Return to home page (ilk açılış sayfası) from fullscreen
+        console.log('returnToHomePage called, current state:', this.playerState);
+        
+        // Check if we're actually in fullscreen
+        if (this.playerState !== 'fullscreen') {
+            console.log('Not in fullscreen, current state:', this.playerState);
+            return;
+        }
+        
+        console.log('Returning to home page from fullscreen');
+        
+        // First, ensure app container and main content are visible
+        if (this.appContainer) {
+            this.appContainer.style.display = '';
+            this.appContainer.style.visibility = '';
+            this.appContainer.style.opacity = '';
+            this.appContainer.scrollTop = 0;
+        }
+        
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent) {
+            mainContent.style.display = '';
+            mainContent.style.visibility = '';
+            mainContent.style.opacity = '';
+            mainContent.scrollTop = 0;
+        }
+        
+        // Ensure categories section is visible
+        const categoriesSection = document.querySelector('.categories-section');
+        if (categoriesSection) {
+            categoriesSection.style.display = '';
+            categoriesSection.style.visibility = '';
+            categoriesSection.style.opacity = '';
+        }
+        
+        // Ensure channels grid is visible
+        const channelsGrid = document.getElementById('channelsGrid');
+        if (channelsGrid) {
+            channelsGrid.style.display = '';
+            channelsGrid.style.visibility = '';
+            channelsGrid.style.opacity = '';
+        }
+        
+        // Reset to "Tümü" category (ilk açılış sayfası gibi) - DO THIS FIRST
+        if (this.currentCategory !== 'Tümü') {
+            console.log('Changing category to Tümü');
+            this.selectCategory('Tümü');
+        } else {
+            // Even if already Tümü, re-render to ensure channels are visible
+            console.log('Re-rendering channels for Tümü');
+            this.renderChannels();
+        }
+        
+        // Scroll to top of the page (anasayfa) immediately - DO THIS BEFORE STATE CHANGE
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+        
+        // Now change state to normal using setPlayerState to ensure all state changes happen
+        // Use a flag to prevent infinite recursion
+        if (!this._returningToHome) {
+            this._returningToHome = true;
+            
+            // Immediately remove fullscreen class and add normal class
+            if (this.bottomPlayer) {
+                this.bottomPlayer.classList.remove('player-fullscreen');
+                this.bottomPlayer.classList.add('player-normal');
+                // Force remove any inline styles that might interfere
+                this.bottomPlayer.style.position = '';
+                this.bottomPlayer.style.top = '';
+                this.bottomPlayer.style.left = '';
+                this.bottomPlayer.style.right = '';
+                this.bottomPlayer.style.bottom = '';
+                this.bottomPlayer.style.width = '';
+                this.bottomPlayer.style.height = '';
+                this.bottomPlayer.style.zIndex = '';
+            }
+            
+            this.setPlayerState('normal');
+            this._returningToHome = false;
+        } else {
+            // If already returning, just update state directly
+            this.playerState = 'normal';
+            if (this.bottomPlayer) {
+                this.bottomPlayer.classList.remove('player-fullscreen');
+                this.bottomPlayer.classList.add('player-normal');
+                // Force remove any inline styles that might interfere
+                this.bottomPlayer.style.position = '';
+                this.bottomPlayer.style.top = '';
+                this.bottomPlayer.style.left = '';
+                this.bottomPlayer.style.right = '';
+                this.bottomPlayer.style.bottom = '';
+                this.bottomPlayer.style.width = '';
+                this.bottomPlayer.style.height = '';
+                this.bottomPlayer.style.zIndex = '';
+            }
+        }
+        
+        // Immediately resize canvas to normal size
+        if (this.playerSpectrumCanvas) {
+            const wrapper = this.playerSpectrumCanvas.parentElement;
+            if (wrapper) {
+                // Clear ALL fullscreen styles immediately
+                this.playerSpectrumCanvas.style.width = '';
+                this.playerSpectrumCanvas.style.height = '';
+                this.playerSpectrumCanvas.style.minWidth = '';
+                this.playerSpectrumCanvas.style.minHeight = '';
+                
+                // Force immediate layout recalculation
+                void wrapper.offsetWidth;
+                void wrapper.offsetHeight;
+                
+                // Set normal size immediately - use fixed small size to ensure it's small
+                const normalWidth = 300; // Fixed small width
+                const normalHeight = 60; // Fixed small height
+                this.playerSpectrumCanvas.width = normalWidth;
+                this.playerSpectrumCanvas.height = normalHeight;
+                
+                console.log('Canvas resized to normal size:', normalWidth, 'x', normalHeight);
+            }
+        }
+        
+        // Apply zoom for normal mode
+        this.applyZoom();
+        
+        // Update tooltip
+        this.updateSpectrumTooltip();
+        
+        // Force resize to ensure canvas stays small and channels are visible
+        setTimeout(() => {
+            if (this.playerSpectrumCanvas && this.playerState === 'normal') {
+                const wrapper = this.playerSpectrumCanvas.parentElement;
+                if (wrapper) {
+                    this.playerSpectrumCanvas.style.width = '';
+                    this.playerSpectrumCanvas.style.height = '';
+                    const normalWidth = wrapper.clientWidth || 300;
+                    const normalHeight = wrapper.clientHeight || 60;
+                    this.playerSpectrumCanvas.width = normalWidth;
+                    this.playerSpectrumCanvas.height = normalHeight;
+                    console.log('Canvas final size:', normalWidth, 'x', normalHeight);
+                }
+            }
+            
+            // Ensure main content is visible and scrolled to top
+            const mainContentEl = document.querySelector('.main-content');
+            if (mainContentEl) {
+                mainContentEl.scrollTop = 0;
+                mainContentEl.style.display = ''; // Ensure it's visible
+            }
+            
+            // Ensure channels grid is visible
+            const channelsGrid = document.getElementById('channelsGrid');
+            if (channelsGrid) {
+                channelsGrid.style.display = ''; // Ensure it's visible
+            }
+            
+            // Ensure categories are visible
+            const categoriesSection = document.querySelector('.categories-section');
+            if (categoriesSection) {
+                categoriesSection.style.display = ''; // Ensure it's visible
+            }
+        }, 10);
+        
+        console.log('returnToHomePage completed, new state:', this.playerState);
     }
     
     setPlayerState(state) {
@@ -1448,11 +1910,31 @@ class RadioApp {
         this.applyZoom();
         
         // Resize spectrum canvas when state changes
-        setTimeout(() => {
+        if (state === 'fullscreen') {
+            // For fullscreen, immediately set large size and resize multiple times
+            // First, force immediate resize
             this.resizeSpectrumCanvas();
-            // Update tooltip icon size for fullscreen
-            this.updateSpectrumTooltip();
-        }, 100);
+            // Then resize multiple times to ensure large size is set
+            requestAnimationFrame(() => {
+                this.resizeSpectrumCanvas();
+                this.updateSpectrumTooltip();
+            });
+            setTimeout(() => {
+                this.resizeSpectrumCanvas();
+            }, 50);
+            setTimeout(() => {
+                this.resizeSpectrumCanvas();
+            }, 200);
+            setTimeout(() => {
+                this.resizeSpectrumCanvas();
+            }, 500);
+        } else {
+            setTimeout(() => {
+                this.resizeSpectrumCanvas();
+                // Update tooltip icon size
+                this.updateSpectrumTooltip();
+            }, 100);
+        }
     }
     
     resizeSpectrumCanvas() {
@@ -1462,18 +1944,67 @@ class RadioApp {
         if (!wrapper) return;
         
         try {
-            if (wrapper && typeof wrapper.clientWidth !== 'undefined' && wrapper.clientWidth > 0) {
-                this.playerSpectrumCanvas.width = wrapper.clientWidth;
-                this.playerSpectrumCanvas.height = wrapper.clientHeight || 60;
+            if (this.playerState === 'fullscreen') {
+                // In fullscreen mode, set large size IMMEDIATELY
+                // Force wrapper visibility and layout
+                wrapper.style.display = 'flex';
+                wrapper.style.visibility = 'visible';
+                wrapper.style.opacity = '1';
+                
+                // Force layout recalculation
+                void wrapper.offsetWidth;
+                void wrapper.offsetHeight;
+                
+                // Calculate large canvas size for fullscreen
+                const screenWidth = window.innerWidth;
+                const screenHeight = window.innerHeight;
+                
+                // Large size for fullscreen (70% of screen width, 40% of screen height)
+                const canvasWidth = Math.min(Math.max(screenWidth * 0.7, 600), 1200);
+                const canvasHeight = Math.min(Math.max(screenHeight * 0.4, 300), 500);
+                
+                // Set CSS styles for large size IMMEDIATELY
+                this.playerSpectrumCanvas.style.width = `${canvasWidth}px`;
+                this.playerSpectrumCanvas.style.height = `${canvasHeight}px`;
+                this.playerSpectrumCanvas.style.minWidth = `${canvasWidth}px`;
+                this.playerSpectrumCanvas.style.minHeight = `${canvasHeight}px`;
+                
+                // Set actual canvas dimensions IMMEDIATELY
+                this.playerSpectrumCanvas.width = canvasWidth;
+                this.playerSpectrumCanvas.height = canvasHeight;
+                
+                // Force another layout recalculation after setting size
+                void this.playerSpectrumCanvas.offsetWidth;
+                void this.playerSpectrumCanvas.offsetHeight;
             } else {
-                const computedStyle = window.getComputedStyle(wrapper || this.playerSpectrumCanvas);
-                this.playerSpectrumCanvas.width = parseInt(computedStyle.width) || 300;
-                this.playerSpectrumCanvas.height = parseInt(computedStyle.height) || 60;
+                // In normal/minimized mode, use wrapper size
+                // Clear fullscreen styles
+                this.playerSpectrumCanvas.style.width = '';
+                this.playerSpectrumCanvas.style.height = '';
+                this.playerSpectrumCanvas.style.minWidth = '';
+                this.playerSpectrumCanvas.style.minHeight = '';
+                
+                // Force layout recalculation
+                void wrapper.offsetWidth;
+                
+                if (wrapper && typeof wrapper.clientWidth !== 'undefined' && wrapper.clientWidth > 0) {
+                    this.playerSpectrumCanvas.width = wrapper.clientWidth;
+                    this.playerSpectrumCanvas.height = wrapper.clientHeight || 60;
+                } else {
+                    const computedStyle = window.getComputedStyle(wrapper || this.playerSpectrumCanvas);
+                    this.playerSpectrumCanvas.width = parseInt(computedStyle.width) || 300;
+                    this.playerSpectrumCanvas.height = parseInt(computedStyle.height) || 60;
+                }
             }
         } catch (error) {
             console.warn('Error resizing spectrum canvas:', error);
-            this.playerSpectrumCanvas.width = 300;
-            this.playerSpectrumCanvas.height = 60;
+            if (this.playerState === 'fullscreen') {
+                this.playerSpectrumCanvas.width = 1000;
+                this.playerSpectrumCanvas.height = 400;
+            } else {
+                this.playerSpectrumCanvas.width = 300;
+                this.playerSpectrumCanvas.height = 60;
+            }
         }
     }
 
