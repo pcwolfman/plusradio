@@ -2008,6 +2008,16 @@ class RadioApp {
         }
     }
 
+    getCategoryDisplayName(category) {
+        // Map category names to display names
+        const categoryMap = {
+            'Türk Halk Müziği': 'T.Halk Müziği',
+            'Türk Sanat Müziği': 'T.Sanat Müziği',
+            'Son Dinlenenler': 'Geçmiş'
+        };
+        return categoryMap[category] || category;
+    }
+
     renderCategories() {
         const categoryList = document.getElementById('categoryList');
         categoryList.innerHTML = '';
@@ -2016,6 +2026,7 @@ class RadioApp {
         const allItem = document.createElement('div');
         allItem.className = 'category-item active';
         allItem.innerHTML = '<span class="category-icon">📻</span> Tümü';
+        allItem.setAttribute('data-category', 'Tümü');
         allItem.addEventListener('click', () => this.selectCategory('Tümü'));
         categoryList.appendChild(allItem);
 
@@ -2023,13 +2034,15 @@ class RadioApp {
         const favoritesItem = document.createElement('div');
         favoritesItem.className = 'category-item';
         favoritesItem.innerHTML = '<span class="category-icon">❤️</span> Favoriler';
+        favoritesItem.setAttribute('data-category', 'Favoriler');
         favoritesItem.addEventListener('click', () => this.selectCategory('Favoriler'));
         categoryList.appendChild(favoritesItem);
 
-        // Add "Son Dinlenenler" option
+        // Add "Geçmiş" option (Son Dinlenenler)
         const recentItem = document.createElement('div');
         recentItem.className = 'category-item';
-        recentItem.innerHTML = '<span class="category-icon">🕐</span> Son Dinlenenler';
+        recentItem.innerHTML = '<span class="category-icon">🕐</span> Geçmiş';
+        recentItem.setAttribute('data-category', 'Son Dinlenenler');
         recentItem.addEventListener('click', () => this.selectCategory('Son Dinlenenler'));
         categoryList.appendChild(recentItem);
 
@@ -2056,7 +2069,10 @@ class RadioApp {
 
             const item = document.createElement('div');
             item.className = 'category-item';
-            item.textContent = category;
+            // Get display name for category
+            const displayName = this.getCategoryDisplayName(category);
+            item.textContent = displayName;
+            item.setAttribute('data-category', category); // Store original category name
             item.addEventListener('click', () => this.selectCategory(category));
             categoryList.appendChild(item);
         });
@@ -2102,7 +2118,7 @@ class RadioApp {
         } else if (this.currentCategory === 'Tümü') {
             categoryTitle.textContent = 'Tüm Kanallar';
         } else {
-            categoryTitle.textContent = this.currentCategory;
+            categoryTitle.textContent = this.getCategoryDisplayName(this.currentCategory);
         }
         
         channelCount.textContent = `${stations.length} kanal`;
@@ -2321,11 +2337,18 @@ class RadioApp {
             item.classList.remove('active');
             // Check text content or innerHTML for icon cases
             const itemText = item.textContent.trim() || item.innerText.trim();
-            if (itemText === category || 
-                itemText.includes('Tümü') && category === 'Tümü' ||
-                itemText.includes('Favoriler') && category === 'Favoriler' ||
-                itemText.includes('Son Dinlenenler') && category === 'Son Dinlenenler' ||
-                itemText === category) {
+            // Get display name for comparison
+            const displayName = this.getCategoryDisplayName(category);
+            // Check if this item matches the selected category
+            const itemCategory = item.getAttribute('data-category') || 
+                                (itemText.includes('Tümü') ? 'Tümü' :
+                                 itemText.includes('Favoriler') ? 'Favoriler' :
+                                 (itemText.includes('Son Dinlenenler') || itemText.includes('Geçmiş')) ? 'Son Dinlenenler' :
+                                 null);
+            
+            if (itemCategory === category || 
+                itemText === category || 
+                itemText === displayName) {
                 item.classList.add('active');
             }
         });
