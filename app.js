@@ -15,6 +15,7 @@ class RadioApp {
         this.loadingTimeout = null;
         this.isLoading = false;
         this.viewMode = this.loadViewMode(); // 'compact', 'normal', 'grid'
+        this.switchingStation = false; // Flag to prevent infinite loops when switching stations
         
         this.audio = document.getElementById('audioPlayer');
         this.playPauseBtn = document.getElementById('playPauseBtn');
@@ -24,12 +25,16 @@ class RadioApp {
         this.nextStationBtn = document.getElementById('nextStationBtn');
         this.searchInput = document.getElementById('searchInput');
         this.searchBtn = null; // Removed from HTML
+        this.voiceSearchBtn = document.getElementById('voiceSearchBtn');
+        this.searchWrapper = document.querySelector('.search-wrapper');
+        this.searchDebounceTimer = null;
         this.bottomPlayer = document.getElementById('bottomPlayer');
         this.playerFavoriteBtn = document.getElementById('playerFavoriteBtn');
         this.listToggleBtn = document.getElementById('listToggleBtn');
         this.zoomToggleBtn = document.getElementById('zoomToggleBtn');
         this.zoomToggleBtnFullscreen = document.getElementById('zoomToggleBtnFullscreen');
         this.playerSpectrumCanvas = document.getElementById('playerSpectrumCanvas');
+        this.highlightsRow = document.getElementById('highlightsRow');
         
         // Zoom state
         this.zoomLevel = this.loadZoomLevel(); // 1.0 = normal, 1.25 = %125, 1.5 = %150, etc.
@@ -49,6 +54,18 @@ class RadioApp {
         this.analyser = null;
         this.dataArray = null;
         this.playerSpectrumAnimationId = null;
+        
+        // Voice recognition
+        this.recognition = null;
+        this.isListening = false;
+        this.androidPermissionRequested = false; // Track if Android permission was requested
+        this.permissionErrorTimeout = null; // Timeout for permission error display
+        this.voiceStartTimeout = null; // Timeout if recognition never starts
+        this.browserPermissionRequested = false; // Track browser permission requests
+        this.initVoiceRecognition();
+        
+        // Expose Android callback functions to window for Android app to call
+        this.setupAndroidCallbacks();
         
         this.appContainer = document.getElementById('appContainer');
         this.offlineMessage = document.getElementById('offlineMessage');
@@ -468,6 +485,7 @@ class RadioApp {
         if (!this.favorites.includes(stationId)) {
             this.favorites.push(stationId);
             this.saveFavorites();
+            this.renderHighlightsRow();
             return true;
         }
         return false;
@@ -479,6 +497,7 @@ class RadioApp {
         if (index > -1) {
             this.favorites.splice(index, 1);
             this.saveFavorites();
+            this.renderHighlightsRow();
             return true;
         }
         return false;
@@ -509,6 +528,7 @@ class RadioApp {
         // Add to beginning
         this.recentlyPlayed.unshift(stationId);
         this.saveRecentlyPlayed();
+        this.renderHighlightsRow();
     }
     
     getStationId(station) {
@@ -517,6 +537,136 @@ class RadioApp {
     
     getStationById(stationId) {
         return this.parser.stations.find(s => this.getStationId(s) === stationId);
+    }
+
+    renderHighlightsRow() {
+        const row = this.highlightsRow;
+        if (!row) return;
+
+        const hasFavorites = this.favorites && this.favorites.length > 0;
+        const hasRecent = this.recentlyPlayed && this.recentlyPlayed.length > 0;
+
+        // Her kategori için, sadece veri varsa göster
+        if (!hasFavorites && !hasRecent) {
+            row.style.display = 'none';
+            row.innerHTML = '';
+            return;
+        }
+
+        row.style.display = 'flex';
+        row.innerHTML = '';
+
+        const createGroup = (title, ids, categoryKey) => {
+            if (!ids || ids.length === 0) return;
+
+            const group = document.createElement('div');
+            group.className = 'highlights-group';
+
+            const groupTitle = document.createElement('div');
+            groupTitle.className = 'highlights-group-title';
+            groupTitle.textContent = title;
+
+            const groupRow = document.createElement('div');
+            groupRow.className = 'highlights-group-row';
+
+            const seen = new Set();
+            const stations = [];
+            for (const id of ids) {
+                if (seen.has(id)) continue;
+                seen.add(id);
+                const station = this.getStationById(id);
+                if (!station || this.isBroken(station)) continue;
+                stations.push(station);
+                if (stations.length >= 10) break;
+            }
+
+            stations.forEach((station, index) => {
+                const card = document.createElement('button');
+                card.type = 'button';
+                card.className = 'highlight-card';
+                card.setAttribute('data-station-id', this.getStationId(station));
+
+                // Logo - same logic as normal channels
+                let logoUrl = station.logo || '';
+                if (logoUrl) {
+                    logoUrl = String(logoUrl).trim();
+                    if (logoUrl.startsWith('http://')) {
+                        logoUrl = logoUrl.replace('http://', 'https://');
+                    }
+                    if (!logoUrl.startsWith('http://') && !logoUrl.startsWith('https://') && !logoUrl.startsWith('data:')) {
+                        logoUrl = '';
+                    }
+                }
+                const originalLogoUrl = logoUrl && logoUrl !== '' && logoUrl !== 'undefined' && logoUrl !== 'null' ? logoUrl : null;
+                if (!originalLogoUrl) {
+                    logoUrl = this.generatePlaceholderUrl(station.name);
+                }
+
+                const meta =
+                    categoryKey === 'favorites'
+                        ? 'Favoriler'
+                        : (index === 0 ? 'Son oynatılan' : 'Geçmiş');
+
+                card.innerHTML = `
+                    <img src="${logoUrl}" 
+                         alt="${station.name}" 
+                         class="highlight-logo channel-logo"
+                         loading="lazy"
+                         decoding="async"
+                         referrerpolicy="no-referrer"
+                         data-station-name="${station.name.replace(/"/g, '&quot;')}"
+                         data-original-logo="${originalLogoUrl ? originalLogoUrl.replace(/"/g, '&quot;') : ''}">
+                    <div class="highlight-info">
+                        <div class="highlight-name" title="${station.name}">${station.name}</div>
+                        <div class="highlight-meta">${meta}</div>
+                    </div>
+                `;
+
+                // Add error handler for logo - same as normal channels
+                const logoImg = card.querySelector('.highlight-logo');
+                if (logoImg && originalLogoUrl) {
+                    let hasTriedProxy = false;
+                    const stationName = station.name;
+                    
+                    logoImg.addEventListener('error', function() {
+                        // Try proxy if we haven't already
+                        if (!hasTriedProxy && originalLogoUrl && !this.src.includes('corsproxy.io') && !this.src.includes('data:image/svg+xml')) {
+                            hasTriedProxy = true;
+                            const proxyUrl = window.radioApp.getProxiedLogoUrl(originalLogoUrl);
+                            this.src = proxyUrl;
+                            
+                            // Set timeout for proxy attempt
+                            setTimeout(() => {
+                                if (!this.complete || this.naturalWidth === 0) {
+                                    this.src = window.radioApp.generatePlaceholderUrl(stationName);
+                                }
+                            }, 5000);
+                        } else {
+                            // Already tried proxy or no original URL, use placeholder
+                            if (!this.src.includes('data:image/svg+xml')) {
+                                this.src = window.radioApp.generatePlaceholderUrl(stationName);
+                            }
+                        }
+                    }, { once: false });
+                }
+
+                card.addEventListener('click', () => {
+                    // İstasyonu seç ve çal (kategori değiştirmeden)
+                    this.selectStation(station, card);
+                });
+
+                groupRow.appendChild(card);
+            });
+
+            if (groupRow.children.length > 0) {
+                group.appendChild(groupTitle);
+                group.appendChild(groupRow);
+                row.appendChild(group);
+            }
+        };
+
+        createGroup('Favoriler', this.favorites, 'favorites');
+        createGroup('Geçmiş', this.recentlyPlayed, 'recent');
     }
 
     async init() {
@@ -538,6 +688,7 @@ class RadioApp {
             
             // Setup UI
             this.renderCategories();
+            this.renderHighlightsRow();
             this.renderChannels();
             this.setupEventListeners();
             this.updateViewModeIcon();
@@ -1455,11 +1606,17 @@ class RadioApp {
             this.isPlaying = false;
             this.updatePlayButton();
             
+            // Prevent infinite loop
+            if (this.switchingStation) return;
+            
             // Mark as broken and remove from view
             if (this.currentStation) {
                 this.markAsBroken(this.currentStation);
-                this.showError('Radyo yayını çalışmıyor. Liste güncellendi.');
+                // Reset audio element before switching to next station
+                this.audio.src = '';
+                this.audio.load();
                 // Try to find next working station
+                this.switchingStation = true;
                 this.findNextWorkingStation();
             }
         });
@@ -1467,16 +1624,15 @@ class RadioApp {
         this.audio.addEventListener('loadstart', () => {
             this.isLoading = true;
             this.showLoadingState();
-            // Set timeout for slow connections (15 seconds)
+            // Set timeout for slow connections (30 seconds)
             this.loadingTimeout = setTimeout(() => {
                 if (this.isLoading && this.currentStation) {
                     console.warn('Loading timeout for:', this.currentStation.name);
                     this.markAsBroken(this.currentStation);
                     this.audio.load(); // Reset
-                    this.showError('Radyo yayını çok yavaş yükleniyor. Liste güncellendi.');
                     this.findNextWorkingStation();
                 }
-            }, 15000);
+            }, 30000);
         });
 
         this.audio.addEventListener('canplay', () => {
@@ -1492,7 +1648,7 @@ class RadioApp {
                     this.markAsBroken(this.currentStation);
                     this.findNextWorkingStation();
                 }
-            }, 15000);
+            }, 30000);
         });
 
         this.audio.addEventListener('loadedmetadata', () => {
@@ -1511,16 +1667,40 @@ class RadioApp {
             this.updateProgressBar();
         });
 
-        // Search
+        // Search - Google style event handling
+        this.searchDebounceTimer = null;
         this.searchInput.addEventListener('input', (e) => {
-            this.searchChannels(e.target.value);
+            this.handleSearchInput(e.target.value);
         });
 
-        this.searchInput.addEventListener('keypress', (e) => {
+        this.searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                this.searchChannels(e.target.value);
+                e.preventDefault();
+                this.performSearch(e.target.value);
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                this.clearSearch();
+            } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                // Prevent default arrow key behavior in search (Google behavior)
+                // Could be extended for autocomplete suggestions
+                e.preventDefault();
             }
         });
+
+        this.searchInput.addEventListener('focus', () => {
+            this.handleSearchFocus();
+        });
+
+        this.searchInput.addEventListener('blur', () => {
+            this.handleSearchBlur();
+        });
+
+        // Voice search
+        if (this.voiceSearchBtn) {
+            this.voiceSearchBtn.addEventListener('click', () => {
+                this.toggleVoiceRecognition();
+            });
+        }
 
         // Zoom toggle
         if (this.zoomToggleBtn) {
@@ -2030,24 +2210,9 @@ class RadioApp {
         allItem.addEventListener('click', () => this.selectCategory('Tümü'));
         categoryList.appendChild(allItem);
 
-        // Add "Favoriler" option
-        const favoritesItem = document.createElement('div');
-        favoritesItem.className = 'category-item';
-        favoritesItem.innerHTML = '<span class="category-icon">❤️</span> Favoriler';
-        favoritesItem.setAttribute('data-category', 'Favoriler');
-        favoritesItem.addEventListener('click', () => this.selectCategory('Favoriler'));
-        categoryList.appendChild(favoritesItem);
-
-        // Add "Geçmiş" option (Son Dinlenenler)
-        const recentItem = document.createElement('div');
-        recentItem.className = 'category-item';
-        recentItem.innerHTML = '<span class="category-icon">🕐</span> Geçmiş';
-        recentItem.setAttribute('data-category', 'Son Dinlenenler');
-        recentItem.addEventListener('click', () => this.selectCategory('Son Dinlenenler'));
-        categoryList.appendChild(recentItem);
-
         // Add other categories
         const categories = this.parser.getCategories();
+        console.log('Available categories:', categories);
         categories.forEach(category => {
             // Skip generic/title categories
             if (category.includes('RADYO KANALLARI') || 
@@ -2058,14 +2223,16 @@ class RadioApp {
                 return;
             }
 
-            // Check if category has any working stations
+            // Check if category has any stations (don't filter by broken status for category display)
             const stationsInCategory = this.parser.getStationsByCategory(category);
-            const workingStations = stationsInCategory.filter(s => !this.isBroken(s));
             
-            // Skip category if no working stations
-            if (workingStations.length === 0) {
+            // Show category if it has any stations (even if some are broken)
+            if (stationsInCategory.length === 0) {
+                console.log(`Skipping category "${category}" - no stations`);
                 return;
             }
+
+            console.log(`Adding category "${category}" with ${stationsInCategory.length} stations`);
 
             const item = document.createElement('div');
             item.className = 'category-item';
@@ -2122,6 +2289,9 @@ class RadioApp {
         }
         
         channelCount.textContent = `${stations.length} kanal`;
+
+        // Render highlights row (Favoriler & Geçmiş) sadece Tümü görünümünde
+        this.renderHighlightsRow();
 
         if (stations.length === 0) {
             channelsGrid.innerHTML = '<div class="loading">Kanallar bulunamadı</div>';
@@ -2248,8 +2418,8 @@ class RadioApp {
                 let loadTimeout = null;
                 let hasTriedProxy = false;
                 
-                // Set timeout (10 seconds for visible items, 8 seconds for others)
-                const timeoutDuration = isInViewport ? 10000 : 8000;
+                // Set timeout (20 seconds for visible items, 15 seconds for others)
+                const timeoutDuration = isInViewport ? 20000 : 15000;
                 
                 // Start loading with direct URL first
                 loadTimeout = setTimeout(() => {
@@ -2260,12 +2430,12 @@ class RadioApp {
                             const proxyUrl = this.getProxiedLogoUrl(originalLogoUrl);
                             logoImg.src = proxyUrl;
                             
-                            // Set timeout for proxy attempt (5 seconds)
+                            // Set timeout for proxy attempt (10 seconds)
                             loadTimeout = setTimeout(() => {
                                 if (!logoImg.complete || logoImg.naturalWidth === 0) {
                                     logoImg.src = this.generatePlaceholderUrl(stationName);
                                 }
-                            }, 5000);
+                            }, 10000);
                         } else {
                             // All attempts failed, use placeholder
                             logoImg.src = this.generatePlaceholderUrl(stationName);
@@ -2360,6 +2530,9 @@ class RadioApp {
 
     selectStation(station, itemElement = null) {
         this.currentStation = station;
+        
+        // Reset switching station flag
+        this.switchingStation = false;
         
         // Add to recently played
         this.addToRecentlyPlayed(station);
@@ -2594,6 +2767,13 @@ class RadioApp {
     }
 
     loadStation(url) {
+        // Validate URL
+        if (!url || typeof url !== 'string' || url.trim() === '') {
+            console.error('Invalid station URL:', url);
+            this.showError('Geçersiz radyo URL\'si. Lütfen başka bir kanal seçin.');
+            return;
+        }
+        
         // Clear previous loading state
         this.clearLoadingTimeout();
         this.hideLoadingState();
@@ -2604,7 +2784,7 @@ class RadioApp {
         
         // Set new source with optimized settings
         this.audio.preload = 'auto';
-        this.audio.src = url;
+        this.audio.src = url.trim();
         
         // Load and try to play immediately
         this.audio.load();
@@ -2617,10 +2797,32 @@ class RadioApp {
                 .then(() => {
                     // Playing started successfully
                     this.clearLoadingTimeout();
+                    this.isLoading = false;
+                    this.isPlaying = true;
+                    this.updatePlayButton();
                 })
                 .catch(error => {
-                    console.warn('Auto-play blocked:', error);
-                    // User needs to click play button - this is normal
+                    console.warn('Auto-play blocked or failed:', error);
+                    this.isLoading = false;
+                    this.isPlaying = false;
+                    this.updatePlayButton();
+                    // If autoplay failed due to error (not just browser blocking)
+                    if (error.name !== 'NotAllowedError') {
+                        // Prevent infinite loop
+                        if (this.switchingStation) return;
+                        
+                        // Only auto-switch if we're already in an auto-switching process
+                        // Don't auto-switch on manual station selection (user clicked a station)
+                        // The user can manually try another station if this one doesn't work
+                        if (this.currentStation) {
+                            // Just mark as potentially broken but don't auto-switch
+                            // User can manually try play button or select another station
+                            console.warn('Station may not be working:', this.currentStation.name);
+                            // Don't mark as broken immediately - let user try play button first
+                            // Only mark as broken if user explicitly tries to play and it fails
+                        }
+                    }
+                    // User needs to click play button - this is normal for NotAllowedError
                 });
         }
     }
@@ -2690,24 +2892,53 @@ class RadioApp {
             : this.parser.getStationsByCategory(this.currentCategory);
         
         const workingStations = allStations.filter(s => 
-            !this.isBroken(s) && 
-            this.getStationId(s) !== this.getStationId(this.currentStation)
+            !this.isBroken(s)
         );
         
-        if (workingStations.length > 0) {
-            // Find index of current station
-            const currentIndex = workingStations.findIndex(s => 
-                this.getStationId(s) === this.getStationId(this.currentStation)
-            );
-            
-            // Play next station or first one
-            const nextIndex = currentIndex >= 0 && currentIndex < workingStations.length - 1
-                ? currentIndex + 1
-                : 0;
-            
+        // If no working stations, show error and return
+        if (workingStations.length === 0) {
+            this.showError('Çalışan radyo istasyonu bulunamadı. Lütfen daha sonra tekrar deneyin.');
+            return;
+        }
+        
+        // Find index of current station in all stations (not filtered list)
+        const currentIndex = allStations.findIndex(s => 
+            this.getStationId(s) === this.getStationId(this.currentStation)
+        );
+        
+        // Play next station or first one
+        let nextIndex = -1;
+        if (currentIndex >= 0) {
+            // Find next non-broken station
+            for (let i = currentIndex + 1; i < allStations.length; i++) {
+                if (!this.isBroken(allStations[i])) {
+                    nextIndex = i;
+                    break;
+                }
+            }
+            // If we didn't find one after current, look from beginning
+            if (nextIndex === -1) {
+                for (let i = 0; i < currentIndex; i++) {
+                    if (!this.isBroken(allStations[i])) {
+                        nextIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // If still not found, use first working station
+        if (nextIndex === -1) {
+            nextIndex = allStations.findIndex(s => !this.isBroken(s));
+        }
+        
+        // Prevent infinite loop - if we're back to the same station
+        if (nextIndex !== -1 && this.getStationId(allStations[nextIndex]) !== this.getStationId(this.currentStation)) {
             setTimeout(() => {
-                this.selectStation(workingStations[nextIndex]);
+                this.selectStation(allStations[nextIndex]);
             }, 1000);
+        } else {
+            this.showError('Çalışan başka radyo istasyonu bulunamadı.');
         }
     }
 
@@ -2735,40 +2966,88 @@ class RadioApp {
         return allStations.filter(s => !this.isBroken(s));
     }
 
+    getFilteredStations() {
+        // Get filtered stations based on current category, search query, and broken status
+        // Similar to getFilteredChannels() in PlusTV project
+        let filteredStations = [];
+        
+        // Get base stations based on category
+        if (this.currentCategory === 'Favoriler') {
+            filteredStations = this.favorites
+                .map(id => this.getStationById(id))
+                .filter(s => s !== undefined);
+        } else if (this.currentCategory === 'Son Dinlenenler') {
+            filteredStations = this.recentlyPlayed
+                .map(id => this.getStationById(id))
+                .filter(s => s !== undefined);
+        } else if (this.currentCategory === 'Tümü') {
+            filteredStations = this.parser.stations;
+        } else {
+            filteredStations = this.parser.getStationsByCategory(this.currentCategory);
+        }
+        
+        // Apply search query filter if exists
+        const searchQuery = this.searchInput ? this.searchInput.value.trim().toLowerCase() : '';
+        if (searchQuery) {
+            filteredStations = filteredStations.filter(s => {
+                const stationName = (s.name || '').toLowerCase();
+                const stationGroup = (s.group || '').toLowerCase();
+                return stationName.includes(searchQuery) || stationGroup.includes(searchQuery);
+            });
+        }
+        
+        // Filter out broken stations
+        filteredStations = filteredStations.filter(s => !this.isBroken(s));
+        
+        return filteredStations;
+    }
+
     playNextStation() {
         if (!this.currentStation) return;
         
-        const workingStations = this.getWorkingStations();
-        if (workingStations.length === 0) return;
+        const filteredStations = this.getFilteredStations();
+        if (filteredStations.length === 0) return;
         
-        const currentIndex = workingStations.findIndex(s => 
+        // Find current station index in filtered list
+        const currentIndex = filteredStations.findIndex(s => 
             this.getStationId(s) === this.getStationId(this.currentStation)
         );
         
-        const nextIndex = currentIndex >= 0 && currentIndex < workingStations.length - 1
-            ? currentIndex + 1
-            : 0;
+        if (currentIndex === -1) {
+            // Current station not in filtered list, play first station
+            if (filteredStations.length > 0) {
+                this.selectStation(filteredStations[0], null);
+            }
+            return;
+        }
         
-        // Don't change category, just select the station
-        this.selectStation(workingStations[nextIndex], null);
+        // Go to next station (wrap around to first if at last)
+        const nextIndex = currentIndex === filteredStations.length - 1 ? 0 : currentIndex + 1;
+        this.selectStation(filteredStations[nextIndex], null);
     }
 
     playPreviousStation() {
         if (!this.currentStation) return;
         
-        const workingStations = this.getWorkingStations();
-        if (workingStations.length === 0) return;
+        const filteredStations = this.getFilteredStations();
+        if (filteredStations.length === 0) return;
         
-        const currentIndex = workingStations.findIndex(s => 
+        // Find current station index in filtered list
+        const currentIndex = filteredStations.findIndex(s => 
             this.getStationId(s) === this.getStationId(this.currentStation)
         );
         
-        const prevIndex = currentIndex > 0
-            ? currentIndex - 1
-            : workingStations.length - 1;
+        if (currentIndex === -1) {
+            // Current station not in filtered list, play first station
+            if (filteredStations.length > 0) {
+                this.selectStation(filteredStations[0], null);
+            }
+            return;
+        }
         
-        // Don't change category, just select the station
-        this.selectStation(workingStations[prevIndex], null);
+        // Go to previous station (wrap around to last if at first)
+        const prevIndex = currentIndex === 0 ? filteredStations.length - 1 : currentIndex - 1;
+        this.selectStation(filteredStations[prevIndex], null);
     }
 
     stopStation() {
@@ -2878,12 +3157,687 @@ class RadioApp {
         });
     }
 
+    // Google-style search handling with debouncing
+    handleSearchInput(query) {
+        // Clear previous timer
+        if (this.searchDebounceTimer) {
+            clearTimeout(this.searchDebounceTimer);
+            this.searchDebounceTimer = null;
+        }
+
+        // Debounce search - wait 300ms after user stops typing (Google uses similar approach)
+        // Google typically uses 150-300ms debounce for search
+        this.searchDebounceTimer = setTimeout(() => {
+            const trimmedQuery = query.trim();
+            this.searchChannels(trimmedQuery);
+            this.searchDebounceTimer = null;
+        }, 300);
+    }
+
+    performSearch(query, isVoiceSearch = false) {
+        // Clear debounce timer
+        if (this.searchDebounceTimer) {
+            clearTimeout(this.searchDebounceTimer);
+            this.searchDebounceTimer = null;
+        }
+        
+        // Perform immediate search on Enter
+        const trimmedQuery = query.trim();
+        this.searchChannels(trimmedQuery);
+        
+        // If voice search and only one result, auto-play that station
+        if (isVoiceSearch && trimmedQuery) {
+            setTimeout(() => {
+                const searchResults = this.parser.searchStations(trimmedQuery);
+                const validResults = searchResults.filter(s => !this.isBroken(s));
+                
+                if (validResults.length === 1) {
+                    // Only one result found, auto-play it
+                    console.log('Voice search found single result, auto-playing:', validResults[0].name);
+                    this.selectStation(validResults[0]);
+                }
+            }, 300); // Small delay to ensure renderChannels has completed
+        }
+        
+        // Google behavior: Keep focus if query is empty, blur if has query
+        if (trimmedQuery) {
+            // Small delay before blur (Google behavior)
+            setTimeout(() => {
+                if (document.activeElement === this.searchInput) {
+                    this.searchInput.blur();
+                }
+            }, 100);
+        }
+    }
+
+    clearSearch() {
+        // Clear debounce timer
+        if (this.searchDebounceTimer) {
+            clearTimeout(this.searchDebounceTimer);
+            this.searchDebounceTimer = null;
+        }
+        
+        this.searchInput.value = '';
+        this.searchChannels('');
+        // Google behavior: Keep focus after clearing with Escape
+        // this.searchInput.blur();
+    }
+
+    handleSearchFocus() {
+        // Add focus class for styling (handled by CSS :focus-within)
+        if (this.searchWrapper) {
+            this.searchWrapper.classList.add('focused');
+        }
+    }
+
+    handleSearchBlur() {
+        // Remove focus class
+        if (this.searchWrapper) {
+            this.searchWrapper.classList.remove('focused');
+        }
+    }
+
     searchChannels(query) {
         this.renderChannels(query);
     }
 
-    showError(message) {
-        alert(message); // Can be replaced with a better UI component
+    initVoiceRecognition() {
+        // Ensure voice search button is visible if it exists
+        if (this.voiceSearchBtn) {
+            this.voiceSearchBtn.style.display = 'flex';
+            this.voiceSearchBtn.style.visibility = 'visible';
+        }
+        
+        // Check if browser supports Web Speech API - Chrome uses webkitSpeechRecognition
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            if (this.voiceSearchBtn) {
+                this.voiceSearchBtn.style.display = 'none';
+            }
+            return;
+        }
+
+        // Initialize Speech Recognition - Chrome priority: webkitSpeechRecognition first
+        const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+        this.recognition = new SpeechRecognition();
+        this.recognition.continuous = false;
+        this.recognition.interimResults = false;
+        this.recognition.lang = 'tr-TR'; // Turkish language
+        
+        console.log('Voice recognition initialized with:', SpeechRecognition === window.webkitSpeechRecognition ? 'webkitSpeechRecognition' : 'SpeechRecognition');
+
+        // Handle recognition results - Google style
+        this.recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript.trim();
+            this.searchInput.value = transcript;
+            // Perform search immediately after voice input (Google behavior)
+            // Pass isVoiceSearch=true to enable auto-play for single results
+            this.performSearch(transcript, true);
+        };
+
+        // Handle errors
+        this.recognition.onerror = (event) => {
+            console.error('Voice recognition error:', event.error);
+            this.stopVoiceRecognition();
+            
+            if (event.error === 'no-speech') {
+                // User didn't speak, just stop listening
+                this.showInfo('Ses algılanamadı. Lütfen tekrar deneyin.', 'Sesli Arama');
+            } else if (event.error === 'not-allowed') {
+                // Permission denied (tarayıcı seviyesi). Artık kullanıcıya ekstra
+                // uzun uyarı göstermiyoruz; yalnızca log bırakıyoruz.
+                console.log('Permission not allowed - browser denied microphone access');
+            } else if (event.error === 'aborted') {
+                // Recognition was aborted, no need to show error
+            } else {
+                this.showError('Sesli arama hatası: ' + event.error, 'Sesli Arama Hatası');
+            }
+        };
+
+        // Handle end of recognition
+        this.recognition.onend = () => {
+            console.log('Voice recognition ended');
+            // Don't call stopVoiceRecognition here as it may interfere with restart
+            // Just update the UI state
+            this.isListening = false;
+            if (this.voiceSearchBtn) {
+                this.voiceSearchBtn.classList.remove('listening');
+                this.voiceSearchBtn.title = 'Sesli arama';
+            }
+            // Clear timeout
+            if (this.voiceStartTimeout) {
+                clearTimeout(this.voiceStartTimeout);
+                this.voiceStartTimeout = null;
+            }
+            // Clear URL hash
+            try {
+                const url = new URL(window.location.href);
+                if (url.hash && url.hash.includes('fpstate=vso')) {
+                    url.hash = '';
+                    window.history.replaceState(null, '', url.toString());
+                }
+            } catch (e) {
+                console.warn('Unable to clear voice search hash state:', e);
+            }
+        };
+
+        // Handle start of recognition
+        this.recognition.onstart = () => {
+            console.log('Voice recognition started successfully (webkitSpeechRecognition)');
+            this.isListening = true;
+            this.updateVoiceButtonUI();
+            
+            // Google tarzı: URL hash ile sesli arama durumunu işaretle (fpstate=vso)
+            try {
+                const url = new URL(window.location.href);
+                url.hash = 'fpstate=vso';
+                window.history.replaceState(null, '', url.toString());
+            } catch (e) {
+                console.warn('Unable to set voice search hash state:', e);
+            }
+            // Clear any pending error timeouts
+            if (this.permissionErrorTimeout) {
+                clearTimeout(this.permissionErrorTimeout);
+                this.permissionErrorTimeout = null;
+            }
+        };
+    }
+
+    resetVoiceRecognition() {
+        // Mobil tarayıcılarda ikinci/üçüncü başlatmada sorun yaşanmaması için
+        // SpeechRecognition nesnesini tamamen yeniden oluştururuz.
+        try {
+            if (this.recognition) {
+                // Remove all event listeners by creating new handlers
+                this.recognition.onresult = null;
+                this.recognition.onerror = null;
+                this.recognition.onend = null;
+                this.recognition.onstart = null;
+                
+                // Try to stop/abort if still running
+                if (this.isListening) {
+                    try {
+                        if (typeof this.recognition.stop === 'function') {
+                            this.recognition.stop();
+                        }
+                    } catch (e) {
+                        // Ignore stop errors
+                    }
+                    try {
+                        if (typeof this.recognition.abort === 'function') {
+                            this.recognition.abort();
+                        }
+                    } catch (e) {
+                        // Ignore abort errors
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Error resetting recognition instance:', e);
+        }
+        
+        this.isListening = false;
+        
+        // Clear timeouts
+        if (this.voiceStartTimeout) {
+            clearTimeout(this.voiceStartTimeout);
+            this.voiceStartTimeout = null;
+        }
+        
+        // Reinitialize recognition with fresh instance
+        this.initVoiceRecognition();
+    }
+
+    setupAndroidCallbacks() {
+        // Expose callback functions to window for Android app to call
+        // Android app will call these functions after permission request
+        window.onMicrophonePermissionGranted = () => {
+            if (this && typeof this.onMicrophonePermissionGranted === 'function') {
+                this.onMicrophonePermissionGranted();
+            }
+        };
+        
+        window.onMicrophonePermissionDenied = () => {
+            if (this && typeof this.onMicrophonePermissionDenied === 'function') {
+                this.onMicrophonePermissionDenied();
+            }
+        };
+    }
+
+    toggleVoiceRecognition() {
+        if (!this.recognition) {
+            this.showError('Tarayıcınız sesli aramayı desteklemiyor.');
+            return;
+        }
+
+        if (this.isListening) {
+            this.stopVoiceRecognition();
+        } else {
+            // Google style: Focus input before starting voice recognition
+            this.searchInput.focus();
+
+            // Özellikle mobilde, önceki oturumdan kalan recognition durumlarını temizle
+            this.resetVoiceRecognition();
+            
+            // Check if running in Android WebView
+            if (this.isAndroidWebView()) {
+                // Request permission from Android app first
+                this.requestAndroidMicrophonePermission();
+            } else {
+                // Tarayıcıda önce getUserMedia ile mikrofon iznini açıkça iste,
+                // sonra SpeechRecognition'i başlat. (getUserMedia akışı)
+                this.startVoiceWithGetUserMedia();
+            }
+        }
+    }
+
+    async startVoiceWithGetUserMedia() {
+        // Eğer mediaDevices yoksa, eski davranış: doğrudan Recognition başlat
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                this.startVoiceRecognition();
+            return;
+        }
+
+        // Eski timeout'u temizle
+        if (this.voiceStartTimeout) {
+            clearTimeout(this.voiceStartTimeout);
+            this.voiceStartTimeout = null;
+        }
+
+        try {
+            // Kullanıcı jesti sonrası mikrofon iznini iste
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // İzni aldıktan hemen sonra stream'i kapat
+            if (stream && stream.getTracks) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+
+            // Şimdi SpeechRecognition'i başlat
+            this.voiceStartTimeout = setTimeout(() => {
+                if (!this.isListening) {
+                    this.showInfo('Bu tarayıcıda sesli arama başlatılamadı.', 'Sesli Arama');
+                }
+            }, 4000);
+            this.startVoiceRecognition();
+        } catch (err) {
+            console.error('getUserMedia microphone request failed:', err);
+            // Kullanıcı reddettiyse ya da tarayıcı izin vermediyse kısa mesaj
+            this.showInfo(
+                'Mikrofon izni verilmedi veya tarayıcı izin vermiyor. Sesli arama için mikrofon izni gereklidir.',
+                'Sesli Arama'
+            );
+        }
+    }
+
+    isAndroidWebView() {
+        // Check if Android interface is available
+        return typeof window.Android !== 'undefined' || 
+               typeof Android !== 'undefined' ||
+               (navigator.userAgent.includes('Android') && navigator.userAgent.includes('wv'));
+    }
+
+    requestAndroidMicrophonePermission() {
+        // Mark that we're requesting permission from Android
+        this.androidPermissionRequested = true;
+        
+        try {
+            // Try different Android interface names
+            if (typeof window.Android !== 'undefined' && typeof window.Android.requestMicrophonePermission === 'function') {
+                // Request permission from Android
+                window.Android.requestMicrophonePermission();
+                // Android will call back via onMicrophonePermissionGranted or onMicrophonePermissionDenied
+            } else if (typeof Android !== 'undefined' && typeof Android.requestMicrophonePermission === 'function') {
+                Android.requestMicrophonePermission();
+            } else {
+                // Fallback: try to start directly (Android might handle permission automatically)
+                console.log('Android interface not found, attempting direct start');
+                this.androidPermissionRequested = false;
+                this.startVoiceRecognition();
+            }
+        } catch (error) {
+            console.error('Error requesting Android microphone permission:', error);
+            this.androidPermissionRequested = false;
+            // Fallback to direct start
+            this.startVoiceRecognition();
+        }
+    }
+
+
+    // Callback function for Android app to call when permission is granted
+    onMicrophonePermissionGranted() {
+        console.log('Microphone permission granted by Android');
+        
+        // Reset the request flag
+        this.androidPermissionRequested = false;
+        
+        // Google style: Directly start recognition after Android permission
+        // Web Speech API will handle its own permission check
+        // No need for getUserMedia - recognition.start() will trigger browser's permission dialog if needed
+        this.startVoiceRecognition();
+    }
+
+    // Callback function for Android app to call when permission is denied
+    onMicrophonePermissionDenied() {
+        console.log('Microphone permission denied by Android');
+        this.androidPermissionRequested = false;
+        this.showError('Mikrofon izni reddedildi. Lütfen uygulama ayarlarından mikrofon iznini verin.', 'Mikrofon İzni');
+    }
+
+    async getMicrophonePermissionState() {
+        if (!navigator.permissions || !navigator.permissions.query) {
+            return null;
+        }
+        
+        try {
+            const result = await navigator.permissions.query({ name: 'microphone' });
+            console.log('Microphone permission state:', result.state);
+            return result;
+        } catch (e) {
+            console.warn('Unable to query microphone permission state:', e);
+            return null;
+        }
+    }
+
+    async requestBrowserMicrophonePermission() {
+        // Eski getUserMedia tabanlı izin isteğini kaldırdık.
+        // Chrome'un kendi SpeechRecognition izin akışını kullanıyoruz.
+        return true;
+    }
+
+    async startVoiceRecognition() {
+        if (!this.recognition) {
+            console.error('Recognition not initialized');
+            return;
+        }
+
+        try {
+            // Stop any ongoing recognition first (Google behavior)
+            if (this.isListening) {
+                console.log('Stopping existing recognition before restart');
+                try {
+                    if (typeof this.recognition.abort === 'function') {
+                        this.recognition.abort();
+                    } else if (typeof this.recognition.stop === 'function') {
+                        this.recognition.stop();
+                    }
+                } catch (e) {
+                    console.warn('Error stopping existing recognition:', e);
+                }
+                this.isListening = false;
+                
+                // Wait a bit before starting again to ensure cleanup
+                setTimeout(() => {
+                    console.log('Starting recognition after stop');
+                    try {
+                        this.recognition.start();
+                        this.isListening = true;
+                        this.updateVoiceButtonUI();
+                    } catch (restartError) {
+                        console.error('Error restarting recognition:', restartError);
+                        // If restart fails, reset and try again
+                        if (restartError.message && !restartError.message.includes('already started')) {
+                            this.resetVoiceRecognition();
+                            setTimeout(() => {
+                                this.startVoiceRecognition();
+                            }, 300);
+                        }
+                    }
+                }, 300);
+                return;
+            }
+            
+            // Google tarzı davranış: ek getUserMedia çağrısı yapmadan,
+            // doğrudan SpeechRecognition.start() çağırıyoruz.
+            console.log('Starting voice recognition (webkitSpeechRecognition)');
+            // Chrome webkitSpeechRecognition - directly start, browser will show permission dialog
+            try {
+                this.recognition.start();
+                // Keep input focused during voice recognition
+                this.searchInput.focus();
+            } catch (startError) {
+                // If start fails, it might be permission related or already running
+                console.log('Recognition start caught error:', startError);
+                
+                // If already started, just update UI
+                if (startError.message && (startError.message.includes('already started') || startError.message.includes('already running'))) {
+                    console.log('Recognition already running, updating UI');
+                    this.isListening = true;
+                    this.updateVoiceButtonUI();
+                } else {
+                    // Other error - reset and try again once
+                    console.log('Recognition start error, resetting and retrying');
+                    this.resetVoiceRecognition();
+                    setTimeout(() => {
+                        try {
+                            if (this.recognition) {
+                                this.recognition.start();
+                                this.isListening = true;
+                                this.updateVoiceButtonUI();
+                            }
+                        } catch (retryError) {
+                            console.error('Retry failed:', retryError);
+                            // The onerror handler will deal with it
+                        }
+                    }, 300);
+                }
+            }
+        } catch (error) {
+            console.error('Error starting voice recognition:', error);
+            this.isListening = false;
+            
+            // If already started, ignore the error (Google behavior)
+            if (error.message && (error.message.includes('already started') || error.message.includes('already running'))) {
+                // Recognition already running, just update UI
+                console.log('Recognition already running, updating UI');
+                this.isListening = true;
+                this.updateVoiceButtonUI();
+            } else {
+                // Other error - let onerror handler deal with it
+                console.log('Voice recognition start error, will be handled by onerror handler');
+                // Don't show error here, onerror will handle it
+            }
+        }
+    }
+
+    updateVoiceButtonUI() {
+        if (this.voiceSearchBtn) {
+            this.voiceSearchBtn.classList.add('listening');
+            this.voiceSearchBtn.title = 'Dinleniyor... (Durdurmak için tıklayın)';
+        }
+        if (this.voiceStartTimeout) {
+            clearTimeout(this.voiceStartTimeout);
+            this.voiceStartTimeout = null;
+        }
+    }
+
+    stopVoiceRecognition() {
+        if (this.recognition && this.isListening) {
+            try {
+                // Use abort instead of stop for more reliable cleanup
+                if (typeof this.recognition.abort === 'function') {
+                    this.recognition.abort();
+                } else if (typeof this.recognition.stop === 'function') {
+                    this.recognition.stop();
+                }
+            } catch (error) {
+                console.error('Error stopping voice recognition:', error);
+            }
+        }
+        
+        this.isListening = false;
+        if (this.voiceSearchBtn) {
+            this.voiceSearchBtn.classList.remove('listening');
+            this.voiceSearchBtn.title = 'Sesli arama';
+        }
+        if (this.voiceStartTimeout) {
+            clearTimeout(this.voiceStartTimeout);
+            this.voiceStartTimeout = null;
+        }
+        
+        // Sesli arama bittiğinde URL hash'ini temizle
+        try {
+            const url = new URL(window.location.href);
+            if (url.hash && url.hash.includes('fpstate=vso')) {
+                url.hash = '';
+                window.history.replaceState(null, '', url.toString());
+            }
+        } catch (e) {
+            console.warn('Unable to clear voice search hash state:', e);
+        }
+        // Keep input focused after stopping (Google behavior)
+        if (document.activeElement !== this.searchInput) {
+            this.searchInput.focus();
+        }
+    }
+
+    showError(message, title = 'Hata') {
+        this.showToast(message, title, 'error');
+    }
+
+    showSuccess(message, title = 'Başarılı') {
+        this.showToast(message, title, 'success');
+    }
+
+    showWarning(message, title = 'Uyarı') {
+        this.showToast(message, title, 'warning');
+    }
+
+    showInfo(message, title = 'Bilgi') {
+        this.showToast(message, title, 'info');
+    }
+
+    showToast(message, title = '', type = 'info', duration = 5000) {
+        const container = document.getElementById('toastContainer');
+        if (!container) {
+            // Fallback to alert if toast container doesn't exist
+            alert(title ? `${title}: ${message}` : message);
+            return;
+        }
+
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+
+        // Icon based on type
+        let iconSvg = '';
+        if (type === 'error') {
+            iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
+        } else if (type === 'success') {
+            iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>';
+        } else if (type === 'warning') {
+            iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>';
+        } else {
+            iconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
+        }
+
+        toast.innerHTML = `
+            <div class="toast-icon">${iconSvg}</div>
+            <div class="toast-content">
+                ${title ? `<div class="toast-title">${title}</div>` : ''}
+                <div class="toast-message">${message}</div>
+            </div>
+            <button class="toast-close" aria-label="Kapat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        `;
+
+        // Close button handler
+        const closeBtn = toast.querySelector('.toast-close');
+        closeBtn.addEventListener('click', () => {
+            this.removeToast(toast);
+        });
+
+        container.appendChild(toast);
+
+        // Auto remove after duration
+        if (duration > 0) {
+            setTimeout(() => {
+                this.removeToast(toast);
+            }, duration);
+        }
+
+        return toast;
+    }
+
+    removeToast(toast) {
+        if (!toast || !toast.parentNode) return;
+        
+        toast.classList.add('fade-out');
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 300);
+    }
+
+    showMicrophonePermissionError() {
+        const browser = this.detectBrowser();
+        let instructions = '';
+
+        if (browser === 'chrome') {
+            instructions = `
+                <ol style="margin: 0.5rem 0; padding-left: 1.5rem; text-align: left;">
+                    <li>Adres çubuğunun solundaki kilit veya bilgi simgesine tıklayın</li>
+                    <li>"Mikrofon" iznini "İzin ver" olarak değiştirin</li>
+                    <li>Sayfayı yenileyin ve tekrar deneyin</li>
+                </ol>
+            `;
+        } else if (browser === 'firefox') {
+            instructions = `
+                <ol style="margin: 0.5rem 0; padding-left: 1.5rem; text-align: left;">
+                    <li>Adres çubuğunun solundaki kilit simgesine tıklayın</li>
+                    <li>"İzinler" bölümünde "Mikrofon" için "İzin ver" seçeneğini seçin</li>
+                    <li>Sayfayı yenileyin ve tekrar deneyin</li>
+                </ol>
+            `;
+        } else if (browser === 'edge') {
+            instructions = `
+                <ol style="margin: 0.5rem 0; padding-left: 1.5rem; text-align: left;">
+                    <li>Adres çubuğunun solundaki kilit simgesine tıklayın</li>
+                    <li>"Mikrofon" iznini "İzin ver" olarak değiştirin</li>
+                    <li>Sayfayı yenileyin ve tekrar deneyin</li>
+                </ol>
+            `;
+        } else if (browser === 'safari') {
+            instructions = `
+                <ol style="margin: 0.5rem 0; padding-left: 1.5rem; text-align: left;">
+                    <li>Safari menüsünden "Tercihler" > "Web Siteleri" > "Mikrofon" seçin</li>
+                    <li>Bu site için "İzin ver" seçeneğini seçin</li>
+                    <li>Sayfayı yenileyin ve tekrar deneyin</li>
+                </ol>
+            `;
+        } else {
+            instructions = `
+                <p style="margin: 0.5rem 0;">Tarayıcı ayarlarından bu site için mikrofon iznini verin.</p>
+            `;
+        }
+
+        const message = `
+            <div style="text-align: left;">
+                <p style="margin-bottom: 0.75rem;">Mikrofon erişimi reddedildi. Sesli arama kullanmak için mikrofon izni gereklidir.</p>
+                <div style="background: var(--surface-light); padding: 0.75rem; border-radius: 8px; margin-top: 0.5rem;">
+                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.5rem;">Nasıl İzin Verilir:</strong>
+                    ${instructions}
+                </div>
+            </div>
+        `;
+
+        this.showToast(message, 'Mikrofon İzni Gerekli', 'warning', 10000);
+    }
+
+    detectBrowser() {
+        const userAgent = navigator.userAgent.toLowerCase();
+        if (userAgent.includes('chrome') && !userAgent.includes('edg')) {
+            return 'chrome';
+        } else if (userAgent.includes('firefox')) {
+            return 'firefox';
+        } else if (userAgent.includes('edg')) {
+            return 'edge';
+        } else if (userAgent.includes('safari') && !userAgent.includes('chrome')) {
+            return 'safari';
+        }
+        return 'unknown';
     }
     
     getProxiedLogoUrl(originalUrl) {
