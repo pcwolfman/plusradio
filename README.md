@@ -88,6 +88,9 @@ Renkler ve stiller `styles.css` dosyasındaki CSS değişkenleri ile özelleşti
 
 Katkılarınızı bekliyoruz! Lütfen pull request gönderin.
 
+<a href="https://www.buymeacoffee.com/pcwolfman" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+
+
 ## 📄 Lisans
 
 Bu proje açık kaynaklıdır ve özgürce kullanılabilir.
@@ -95,6 +98,7 @@ Bu proje açık kaynaklıdır ve özgürce kullanılabilir.
 ---
 
 **Plus Radio** - Modern radyo deneyimi 🎵
+
 
 
 
