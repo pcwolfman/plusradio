@@ -1,5 +1,5 @@
 # Basit HTTP Sunucusu
-$port = 8000
+$port = 8001
 $url = "http://localhost:$port/"
 
 Write-Host "Plus Radio sunucusu başlatılıyor..." -ForegroundColor Green
@@ -46,6 +46,8 @@ try {
             }
             
             $response.ContentType = $mimeType
+            # Allow microphone in this origin for Web Speech API
+            $response.Headers["Permissions-Policy"] = "microphone=*"
             $response.ContentLength64 = $content.Length
             $response.StatusCode = 200
             $response.OutputStream.Write($content, 0, $content.Length)

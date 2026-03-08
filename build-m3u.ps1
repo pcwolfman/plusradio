@@ -37,9 +37,106 @@ function Get-StationLinks {
         }
     }
 
-    $pattern = 'https://www\.canliradyodinle\.fm/[^"#\?]+\.html'
-    $links = [regex]::Matches($content, $pattern) | ForEach-Object { $_.Value } | Sort-Object -Unique
-    $stationLinks = $links | Where-Object { $_ -match '-dinle\.html$' }
+    # Comprehensive patterns to catch ALL station links from homepage
+    # First, extract ALL href links from the page
+    $allLinks = New-Object System.Collections.Generic.HashSet[string]
+    
+    # Pattern 1: Extract all href attributes pointing to canliradyodinle.fm HTML pages
+    $hrefPattern = '(?:href|url|link)["\s:=]+["'']?(https?://(?:www\.)?canliradyodinle\.fm/[^"'']*\.html)["'']?'
+    $hrefMatches = [regex]::Matches($content, $hrefPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    foreach ($match in $hrefMatches) {
+        $url = $match.Groups[1].Value
+        if ($url) {
+            # Normalize URL (ensure https and www)
+            if ($url -match '^http://') { $url = $url -replace '^http://', 'https://' }
+            if ($url -notmatch '^https://www\.') { $url = $url -replace '^https://', 'https://www.' }
+            
+            # Exclude non-station pages but be very permissive for station pages
+            $excludePatterns = @(
+                '/(page|category|tag|author|search|sitemap|contact|about|privacy|terms|künye|yardım|gizlilik|dmca|host)/',
+                '/(wp-|feed|rss|xml|json|api)/',
+                '/#',
+                '\?(page|category|tag|author|search|feed|rss)=',
+                '/(anasayfa|homepage|index)(\.html)?$'
+            )
+            
+            $shouldExclude = $false
+            foreach ($exclude in $excludePatterns) {
+                if ($url -match $exclude) {
+                    $shouldExclude = $true
+                    break
+                }
+            }
+            
+            # Include if it looks like a station page
+            if (-not $shouldExclude) {
+                # Accept if it matches common station URL patterns
+                $stationPatterns = @(
+                    '-dinle\.html$',
+                    '\.html$'  # Accept all HTML pages as potential station pages
+                )
+                
+                $isStationPage = $false
+                foreach ($stationPattern in $stationPatterns) {
+                    if ($url -match $stationPattern) {
+                        $isStationPage = $true
+                        break
+                    }
+                }
+                
+                if ($isStationPage) {
+                    $allLinks.Add($url) | Out-Null
+                }
+            }
+        }
+    }
+    
+    # Pattern 2: Direct URL patterns in text (not just href)
+    $directUrlPatterns = @(
+        'https?://(?:www\.)?canliradyodinle\.fm/[^"''\s<>]+-dinle\.html',
+        'https?://(?:www\.)?canliradyodinle\.fm/radyo-[^"''\s<>]+\.html',
+        'https?://(?:www\.)?canliradyodinle\.fm/[^"''\s<>]+-radyo[^"''\s<>]*\.html',
+        'https?://(?:www\.)?canliradyodinle\.fm/[^"''\s<>]+-fm[^"''\s<>]*\.html'
+    )
+    
+    foreach ($pattern in $directUrlPatterns) {
+        $matches = [regex]::Matches($content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        foreach ($match in $matches) {
+            $url = $match.Value
+            if ($url) {
+                # Normalize URL
+                if ($url -match '^http://') { $url = $url -replace '^http://', 'https://' }
+                if ($url -notmatch '^https://www\.') { $url = $url -replace '^https://', 'https://www.' }
+                $url = $url -replace '[#\?].*$', ''  # Remove fragments and query strings
+                
+                # Exclude non-station pages
+                if ($url -notmatch '/(page|category|tag|author|search|sitemap|contact|about|privacy|terms|wp-|feed|rss|anasayfa)/') {
+                    $allLinks.Add($url) | Out-Null
+                }
+            }
+        }
+    }
+    
+    # Pattern 3: Extract from <a> tags specifically (more comprehensive)
+    $aTagPattern = '<a[^>]+href=["'']?(https?://(?:www\.)?canliradyodinle\.fm/[^"'']*\.html)["'']?[^>]*>'
+    $aTagMatches = [regex]::Matches($content, $aTagPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    foreach ($match in $aTagMatches) {
+        $url = $match.Groups[1].Value
+        if ($url) {
+            # Normalize URL
+            if ($url -match '^http://') { $url = $url -replace '^http://', 'https://' }
+            if ($url -notmatch '^https://www\.') { $url = $url -replace '^https://', 'https://www.' }
+            $url = $url -replace '[#\?].*$', ''
+            
+            # Exclude non-station pages but include everything else
+            if ($url -notmatch '/(page|category|tag|author|search|sitemap|contact|about|privacy|terms|künye|yardım|gizlilik|dmca|host|wp-|feed|rss|xml|api|anasayfa|homepage|index)(/|\.html)?$') {
+                $allLinks.Add($url) | Out-Null
+            }
+        }
+    }
+    
+    # Convert HashSet to array and sort
+    $stationLinks = @($allLinks) | Sort-Object -Unique
     return $stationLinks
 }
 
@@ -79,15 +176,49 @@ function Get-StationLinksFromCategories {
                 $pageUrl = if ($page -eq 1) { $catUrl } else { "$catUrl/page/$page/" }
                 try {
                     $content = $Client.GetStringAsync($pageUrl).GetAwaiter().GetResult()
+                    # Comprehensive pattern to catch ALL station URLs from category pages
+                    $foundCount = 0
+                    $seenUrls = New-Object System.Collections.Generic.HashSet[string]
+                    
+                    # Method 1: Extract all href links comprehensively
+                    $hrefPattern = 'href=["'']?(https?://(?:www\.)?canliradyodinle\.fm/[^"'']*\.html)["'']?'
+                    $hrefMatches = [regex]::Matches($content, $hrefPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                    foreach ($hrefMatch in $hrefMatches) {
+                        $url = $hrefMatch.Groups[1].Value
+                        if ($url) {
+                            # Normalize URL
+                            if ($url -match '^http://') { $url = $url -replace '^http://', 'https://' }
+                            if ($url -notmatch '^https://www\.') { $url = $url -replace '^https://', 'https://www.' }
+                            $url = $url -replace '[#\?].*$', ''
+                            
+                            # Exclude non-station pages
+                            if ($url -notmatch '/(page|category|tag|author|search|sitemap|contact|about|privacy|terms|wp-|feed|rss|xml|api|künye|yardım|gizlilik|dmca|host|anasayfa|homepage|index)(/|\.html)?$') {
+                                if ($url -match '\.html$' -and -not $seenUrls.Contains($url)) {
+                                    # Add to station links with category
+                                    $stationLinks += [PSCustomObject]@{
+                                        Url = $url
+                                        Category = $categoryName
+                                    }
+                                    $seenUrls.Add($url) | Out-Null
+                                    $foundCount++
+                                }
+                            }
+                        }
+                    }
+                    
+                    # Method 2: Also try legacy pattern for compatibility (avoid duplicates)
                     $pattern = 'https://www\.canliradyodinle\.fm/[^"#\?]+-dinle\.html'
                     $matches = [regex]::Matches($content, $pattern)
-                    $foundCount = 0
                     foreach ($match in $matches) {
-                        $stationLinks += [PSCustomObject]@{
-                            Url = $match.Value
-                            Category = $categoryName
+                        $url = $match.Value -replace '[#\?].*$', ''
+                        if (-not $seenUrls.Contains($url)) {
+                            $stationLinks += [PSCustomObject]@{
+                                Url = $url
+                                Category = $categoryName
+                            }
+                            $seenUrls.Add($url) | Out-Null
+                            $foundCount++
                         }
-                        $foundCount++
                     }
                     
                     # Check if there's a next page link
@@ -137,17 +268,47 @@ function Get-StationLinksFromSitemap {
             try {
                 Write-Host "  Crawling sub-sitemap: $subSitemapUrl"
                 $subContent = $Client.GetStringAsync($subSitemapUrl).GetAwaiter().GetResult()
-                # Try multiple patterns to catch all station URLs
+                # Try comprehensive patterns to catch ALL station URLs from sitemap
+                # First, extract all <loc> tags
+                $locPattern = '<loc>(https?://(?:www\.)?canliradyodinle\.fm/[^<]+\.html)</loc>'
+                $locMatches = [regex]::Matches($subContent, $locPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                foreach ($locMatch in $locMatches) {
+                    $url = $locMatch.Groups[1].Value
+                    if ($url) {
+                        # Normalize URL
+                        if ($url -match '^http://') { $url = $url -replace '^http://', 'https://' }
+                        if ($url -notmatch '^https://www\.') { $url = $url -replace '^https://', 'https://www.' }
+                        
+                        # Exclude non-station pages
+                        if ($url -notmatch '/(page|category|tag|author|search|sitemap|contact|about|privacy|terms|wp-|feed|rss|xml|api|künye|yardım|gizlilik|dmca|host|anasayfa|homepage|index)(/|\.html)?$') {
+                            $allLinks.Add($url) | Out-Null
+                        }
+                    }
+                }
+                
+                # Also try legacy patterns for compatibility
                 $urlPatterns = @(
                     '<loc>(https://www\.canliradyodinle\.fm/[^<]+-dinle\.html)</loc>',
-                    '<loc>(https://www\.canliradyodinle\.fm/[^<]+\.html)</loc>'
+                    '<loc>(https://www\.canliradyodinle\.fm/[^<]+\.html)</loc>',
+                    '<loc>(https://www\.canliradyodinle\.fm/radyo-[^<]+\.html)</loc>',
+                    '<loc>(https://www\.canliradyodinle\.fm/[^<]+-radyo[^<]*\.html)</loc>',
+                    '<loc>(https://www\.canliradyodinle\.fm/[^<]+-radyo-[^<]*\.html)</loc>',
+                    '<loc>(https://www\.canliradyodinle\.fm/[^<]+-fm[^<]*\.html)</loc>'
                 )
                 foreach ($urlPattern in $urlPatterns) {
-                    $urlMatches = [regex]::Matches($subContent, $urlPattern)
+                    $urlMatches = [regex]::Matches($subContent, $urlPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
                     foreach ($urlMatch in $urlMatches) {
                         $url = $urlMatch.Groups[1].Value
-                        # Only add if it looks like a station page
-                        if ($url -match '-dinle\.html$' -or $url -match '/radyo[^/]*\.html$' -or $url -match '/[^/]+-fm[^/]*\.html$') {
+                        # Only add if it looks like a station page - expanded patterns
+                        # Exclude non-station pages
+                        if ($url -notmatch '/(page|category|tag|author|search|sitemap|contact|about|privacy|terms|wp-|feed|rss)' -and
+                            ($url -match '-dinle\.html$' -or 
+                             $url -match '/radyo[^/]*\.html$' -or 
+                             $url -match '/[^/]+-fm[^/]*\.html$' -or
+                             $url -match '/radyo-[^/]+\.html$' -or
+                             $url -match '/[^/]+-radyo[^/]*\.html$' -or
+                             $url -match '/[^/]+-radyo-[^/]*\.html$' -or
+                             ($url -match '\.html$' -and $url -match 'canliradyodinle\.fm' -and $url -notmatch '/(page|category|tag|author|search|sitemap)'))) {
                             $allLinks.Add($url) | Out-Null
                         }
                     }
@@ -248,15 +409,56 @@ function Get-StationInfo {
     $response = $Client.GetStringAsync($Url).GetAwaiter().GetResult()
     $page = $response
 
+    # Try multiple patterns to find radyo ID
     $radyoId = [regex]::Match($page, '"radyo":"(\d+)"').Groups[1].Value
     if (-not $radyoId) {
-        Write-Warning "No radyo id found for $Url"
-        return $null
+        $radyoId = [regex]::Match($page, 'radyoid["\s:=]+(\d+)').Groups[1].Value
+    }
+    if (-not $radyoId) {
+        $radyoId = [regex]::Match($page, 'data-radyo-id["\s:=]+["'']?(\d+)').Groups[1].Value
+    }
+    if (-not $radyoId) {
+        $radyoId = [regex]::Match($page, 'radyo["\s:=]+["'']?(\d+)').Groups[1].Value
+    }
+    if (-not $radyoId) {
+        $radyoId = [regex]::Match($page, 'id["\s:=]+["'']?(\d+)["\s]*[,}]').Groups[1].Value
+    }
+    if (-not $radyoId) {
+        $radyoId = [regex]::Match($page, 'radyoId["\s:=]+["'']?(\d+)').Groups[1].Value
+    }
+    if (-not $radyoId) {
+        $radyoId = [regex]::Match($page, 'radioId["\s:=]+["'']?(\d+)').Groups[1].Value
+    }
+    # If still not found, try to extract from URL patterns in JavaScript
+    if (-not $radyoId) {
+        $jsMatch = [regex]::Match($page, 'radyo-cal[^"''\s]*radyoid[=:](\d+)')
+        if ($jsMatch.Success) {
+            $radyoId = $jsMatch.Groups[1].Value
+        }
+    }
+    # Try to find in script tags
+    if (-not $radyoId) {
+        $scriptMatches = [regex]::Matches($page, '<script[^>]*>.*?radyoid[=:](\d+).*?</script>', [System.Text.RegularExpressions.RegexOptions]::Singleline -bor [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        foreach ($scriptMatch in $scriptMatches) {
+            if ($scriptMatch.Groups[1].Value) {
+                $radyoId = $scriptMatch.Groups[1].Value
+                break
+            }
+        }
     }
 
     $name = [regex]::Match($page, '<h1[^>]*><span>([^<]+)').Groups[1].Value.Trim()
     if (-not $name) {
+        $name = [regex]::Match($page, '<h1[^>]*>([^<]+)</h1>').Groups[1].Value.Trim()
+    }
+    if (-not $name) {
         $name = [regex]::Match($page, '<meta property="og:title" content="([^"\r\n]+)').Groups[1].Value.Trim()
+    }
+    if (-not $name) {
+        $name = [regex]::Match($page, '<title>([^<]+)</title>').Groups[1].Value.Trim()
+        # Clean up title (remove site name)
+        $name = $name -replace '\s*[-|]\s*Canlı Radyo Dinle.*$', ''
+        $name = $name.Trim()
     }
 
     # Try multiple sources for logo
@@ -280,26 +482,51 @@ function Get-StationInfo {
     $streams = @()
     
     # Try multiple stream sources
-    # Method 1: Try player API with different yayin numbers (try more if needed)
-    $maxYayin = 10  # Try up to 10 yayin numbers
+    # Method 1: Try player API with different yayin numbers (only if we have radyoId)
+    $maxYayin = 20  # Try up to 20 yayin numbers (increased from 15)
     $foundStreams = 0
     
-    for ($yayin = 1; $yayin -le $maxYayin; $yayin++) {
-        $playerUrl = "https://www.canliradyodinle.fm/radyo-cal?type=shouthtml&radyoid=$radyoId&yayinno=$yayin"
+    # If no radyoId found, try to extract from page URL or try common IDs
+    if (-not $radyoId) {
+        # Try to find radyo ID in page URL or try common patterns
+        $urlMatch = [regex]::Match($Url, '/([^/]+)-dinle\.html$')
+        if ($urlMatch.Success) {
+            # Try to find ID in page content with station name
+            $stationSlug = $urlMatch.Groups[1].Value
+            $idPattern = "radyo.*?$stationSlug.*?(\d+)"
+            $idMatch = [regex]::Match($page, $idPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+            if ($idMatch.Success) {
+                $radyoId = $idMatch.Groups[1].Value
+            }
+        }
+    }
+    
+    if ($radyoId) {
+        for ($yayin = 1; $yayin -le $maxYayin; $yayin++) {
+            $playerUrl = "https://www.canliradyodinle.fm/radyo-cal?type=shouthtml&radyoid=$radyoId&yayinno=$yayin"
         try {
             $playerContent = $Client.GetStringAsync($playerUrl).GetAwaiter().GetResult()
             
-            # Try multiple patterns for stream URLs
+            # Try multiple patterns for stream URLs (expanded patterns)
             $patterns = @(
                 '<source[^>]+src="([^"]+)"',
+                '<source[^>]+src=''([^'']+)''',
                 'player\.src\(\{"type":"[^"]+","src":"([^"]+)"\}\)',
+                'player\.src\(["'']([^"'']+)["'']\)',
                 'src["\s:=]+([^"\s]+\.m3u8[^"\s]*)',
                 'src["\s:=]+([^"\s]+\.mp3[^"\s]*)',
+                'src["\s:=]+([^"\s]+\.aac[^"\s]*)',
+                'src["\s:=]+([^"\s]+\.pls[^"\s]*)',
                 'url["\s:=]+([^"\s]+\.m3u8[^"\s]*)',
                 'url["\s:=]+([^"\s]+\.mp3[^"\s]*)',
+                'url["\s:=]+([^"\s]+\.aac[^"\s]*)',
                 '"stream":"([^"]+)"',
+                '"streamUrl":"([^"]+)"',
                 '"url":"([^"]+)"',
-                'streamUrl["\s:=]+([^"\s]+)'
+                'streamUrl["\s:=]+([^"\s]+)',
+                'file["\s:=]+["'']([^"'']+\.(mp3|m3u8|aac|pls))["'']',
+                'href=["'']([^"'']+\.(mp3|m3u8|aac|pls))["'']',
+                'https?://[^\s"''<>]+\.(mp3|m3u8|aac|pls|stream|icecast)'
             )
             
             $foundInThisYayin = $false
@@ -318,11 +545,17 @@ function Get-StationInfo {
             # If we found streams in early yayin numbers, we can continue to get alternatives
             # But if we haven't found any streams yet and this yayin also has none, keep trying
             if ($foundInThisYayin) {
-                # Found at least one stream, continue to get alternatives
-            } elseif ($foundStreams -eq 0 -and $yayin -ge 3) {
-                # No streams found yet after trying 3 yayin numbers, try a few more
-                if ($yayin -ge 5) {
-                    # Tried 5 yayin numbers with no results, try different methods
+                # Found at least one stream, continue to get alternatives (try up to 3 more)
+                if ($yayin -ge 3) {
+                    # Already found streams, try a couple more for alternatives then break
+                    if ($yayin -ge 5) {
+                        break
+                    }
+                }
+            } elseif ($foundStreams -eq 0 -and $yayin -ge 5) {
+                # No streams found yet after trying 5 yayin numbers, try a few more before giving up
+                if ($yayin -ge 10) {
+                    # Tried 10 yayin numbers with no results, try different methods
                     break
                 }
             }
@@ -335,35 +568,53 @@ function Get-StationInfo {
                 break
             }
         }
+        }
     }
     
-    # Method 2: Try to extract from page directly (only if we haven't found streams yet)
-    if ($streams.Count -eq 0) {
-        $pageStreamPatterns = @(
-            '"stream":"([^"]+)"',
-            '"streamUrl":"([^"]+)"',
-            'data-stream="([^"]+)"',
-            'data-url="([^"]+)"',
-            'src="([^"]+\.m3u8[^"]*)"',
-            'src="([^"]+\.mp3[^"]*)"',
-            'radyo["\s:=]+([^"\s]+\.m3u8[^"\s]*)',
-            'radyo["\s:=]+([^"\s]+\.mp3[^"\s]*)',
-            'yayin["\s:=]+([^"\s]+\.m3u8[^"\s]*)',
-            'yayin["\s:=]+([^"\s]+\.mp3[^"\s]*)'
-        )
-        foreach ($pattern in $pageStreamPatterns) {
-            $matches = [regex]::Matches($page, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-            foreach ($match in $matches) {
-                $streamUrl = $match.Groups[1].Value
-                if ($streamUrl -match '^https?://' -and $streamUrl -notmatch '\.(jpg|png|gif|css|js)$') {
-                    $streams += $streamUrl
-                }
+    # Method 2: Try to extract from page directly (always try this, even if we have radyoId)
+    # Also try even if we have streams, to get alternative streams
+    $pageStreamPatterns = @(
+        '"stream":"([^"]+)"',
+        '"streamUrl":"([^"]+)"',
+        '"stream_url":"([^"]+)"',
+        '"url":"([^"]+)"',
+        'data-stream="([^"]+)"',
+        'data-url="([^"]+)"',
+        'data-stream-url="([^"]+)"',
+        'data-src="([^"]+)"',
+        'data-yayin[^=]*="([^"]+)"',
+        'yayin[^=]*="([^"]+\.(mp3|m3u8|aac|pls))"',
+        'src="([^"]+\.m3u8[^"]*)"',
+        'src="([^"]+\.mp3[^"]*)"',
+        'src="([^"]+\.aac[^"]*)"',
+        'src="([^"]+\.pls[^"]*)"',
+        'href="([^"]+\.(mp3|m3u8|aac|pls))"',
+        'radyo["\s:=]+([^"\s]+\.m3u8[^"\s]*)',
+        'radyo["\s:=]+([^"\s]+\.mp3[^"\s]*)',
+        'yayin["\s:=]+([^"\s]+\.m3u8[^"\s]*)',
+        'yayin["\s:=]+([^"\s]+\.mp3[^"\s]*)',
+        'player\.src\(["'']([^"'']+)["'']\)',
+        'player\.src\(\{"type":"[^"]+","src":"([^"]+)"\}\)',
+        '<source[^>]+src="([^"]+)"',
+        '<source[^>]+src=''([^'']+)''',
+        '<audio[^>]+src="([^"]+)"',
+        'Yayın\s+\d+[^>]*>.*?src="([^"]+)"',
+        'https?://[^\s<>"'']+\.(mp3|m3u8|aac|pls|stream|icecast)[^\s<>"'']*',
+        'https?://[^\s<>"'']+/(live|stream|radio|yayin)[^\s<>"'']*\.(mp3|m3u8|aac|pls)',
+        'https?://[^\s<>"'']+/(live|stream|radio|yayin)[^\s<>"'']*'
+    )
+    foreach ($pattern in $pageStreamPatterns) {
+        $matches = [regex]::Matches($page, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        foreach ($match in $matches) {
+            $streamUrl = $match.Groups[1].Value
+            if ($streamUrl -match '^https?://' -and $streamUrl -notmatch '\.(jpg|png|gif|css|js|html|php)$' -and $streamUrl -notmatch 'canliradyodinle\.fm') {
+                $streams += $streamUrl
             }
         }
     }
     
-    # Method 3: Try alternative API endpoints if still no streams
-    if ($streams.Count -eq 0) {
+    # Method 3: Try alternative API endpoints if still no streams (only if we have radyoId)
+    if ($streams.Count -eq 0 -and $radyoId) {
         $alternativeEndpoints = @(
             "https://www.canliradyodinle.fm/radyo-cal?type=json&radyoid=$radyoId",
             "https://www.canliradyodinle.fm/api/radyo/$radyoId",
@@ -400,17 +651,35 @@ function Get-StationInfo {
 
     $streams = @($streams | Where-Object { $_ -and ($_ -match '^https?://') -and $_ -notmatch '\.(jpg|png|gif|css|js|html)$' } | Select-Object -Unique)
     
-    # If still no streams, try one more time with extended yayin numbers
-    if ($streams.Count -eq 0) {
+    # If still no streams, try one more time with extended yayin numbers and more patterns (only if we have radyoId)
+    if ($streams.Count -eq 0 -and $radyoId) {
         Write-Host "No streams found with standard methods for $Url (id=$radyoId), trying extended yayin numbers..."
-        for ($yayin = 6; $yayin -le 15; $yayin++) {
+        for ($yayin = 11; $yayin -le 20; $yayin++) {
             $playerUrl = "https://www.canliradyodinle.fm/radyo-cal?type=shouthtml&radyoid=$radyoId&yayinno=$yayin"
             try {
                 $playerContent = $Client.GetStringAsync($playerUrl).GetAwaiter().GetResult()
-                $primary = [regex]::Match($playerContent, '<source[^>]+src="([^"]+)"').Groups[1].Value
-                if ($primary -and $primary -match '^https?://') {
-                    $streams += $primary
-                    Write-Host "Found stream in yayin $yayin for $Url"
+                # Try multiple patterns
+                $extendedPatterns = @(
+                    '<source[^>]+src="([^"]+)"',
+                    '<source[^>]+src=''([^'']+)''',
+                    'src["\s:=]+["'']([^"'']+\.(mp3|m3u8|aac|pls))["'']',
+                    'https?://[^\s<>]+\.(mp3|m3u8|aac|pls|stream|icecast)'
+                )
+                foreach ($pattern in $extendedPatterns) {
+                    $matches = [regex]::Matches($playerContent, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                    foreach ($match in $matches) {
+                        $streamUrl = $match.Groups[1].Value
+                        if ($streamUrl -and $streamUrl -match '^https?://' -and $streamUrl -notmatch '\.(jpg|png|gif|css|js|html)$') {
+                            $streams += $streamUrl
+                            Write-Host "Found stream in yayin $yayin for $Url"
+                            break
+                        }
+                    }
+                    if ($streams.Count -gt 0) {
+                        break
+                    }
+                }
+                if ($streams.Count -gt 0) {
                     break
                 }
             } catch {
@@ -436,7 +705,8 @@ function Get-StationInfo {
         'href="([^"]*radyolar/[^"]+)"',
         '<a[^>]+href="([^"]*radyolar/[^"]+)"',
         '<nav[^>]*>.*?<a[^>]+href="([^"]*radyolar/[^"]+)"',
-        '/radyolar/([^/"]+)'
+        '/radyolar/([^/"]+)',
+        'class="[^"]*category[^"]*"[^>]*href="([^"]*radyolar/[^"]+)"'
     )
     
     foreach ($pattern in $breadcrumbPatterns) {
@@ -495,6 +765,40 @@ function Get-StationInfo {
             }
         }
     }
+    
+    # If still no category, try to find category name directly in page content
+    if (-not $category) {
+        $utf8 = [System.Text.Encoding]::UTF8
+        $pageLower = $page.ToLower()
+        # Check for category names in page (like "ARABESK", "POP", etc. in navigation or breadcrumb)
+        if ($pageLower -match 'arabesk.*radyolar|radyolar.*arabesk') {
+            $category = $utf8.GetString([byte[]](0x41,0x72,0x61,0x62,0x65,0x73,0x6B))  # "Arabesk"
+        }
+        elseif ($pageLower -match 'slow.*radyolar|radyolar.*slow') {
+            $category = $utf8.GetString([byte[]](0x53,0x6C,0x6F,0x77))  # "Slow"
+        }
+        elseif ($pageLower -match 'turk.*halk.*radyolar|radyolar.*turk.*halk') {
+            $category = $utf8.GetString([byte[]](0x54,0xC3,0xBC,0x72,0x6B,0x20,0x48,0x61,0x6C,0x6B,0x20,0x4D,0xC3,0xBC,0x7A,0x69,0xC4,0x9F,0x69))  # "Türk Halk Müziği"
+        }
+        elseif ($pageLower -match 'turk.*sanat.*radyolar|radyolar.*turk.*sanat') {
+            $category = $utf8.GetString([byte[]](0x54,0xC3,0xBC,0x72,0x6B,0x20,0x53,0x61,0x6E,0x61,0x74,0x20,0x4D,0xC3,0xBC,0x7A,0x69,0xC4,0x9F,0x69))  # "Türk Sanat Müziği"
+        }
+        elseif ($pageLower -match 'islami.*radyolar|radyolar.*islami|dini.*radyolar') {
+            $category = $utf8.GetString([byte[]](0xC4,0xB0,0x73,0x6C,0x61,0x6D,0x69))  # "İslami"
+        }
+        elseif ($pageLower -match 'haber.*spor.*radyolar|radyolar.*haber.*spor|spor.*radyolar') {
+            $category = $utf8.GetString([byte[]](0x48,0x61,0x62,0x65,0x72,0x20,0x26,0x20,0x53,0x70,0x6F,0x72))  # "Haber & Spor"
+        }
+        elseif ($pageLower -match 'rap.*rock.*radyolar|radyolar.*rap.*rock') {
+            $category = $utf8.GetString([byte[]](0x52,0x61,0x70,0x20,0x26,0x20,0x52,0x6F,0x63,0x6B))  # "Rap & Rock"
+        }
+        elseif ($pageLower -match 'yabanci.*radyolar|radyolar.*yabanci|foreign.*radyolar') {
+            $category = $utf8.GetString([byte[]](0x59,0x61,0x62,0x61,0x6E,0x63,0xC4,0xB1))  # "Yabancı"
+        }
+        elseif ($pageLower -match 'klasik.*radyolar|radyolar.*klasik') {
+            $category = $utf8.GetString([byte[]](0x4B,0x6C,0x61,0x73,0x69,0x6B))  # "Klasik"
+        }
+    }
 
     return [PSCustomObject]@{
         Name    = $name
@@ -516,10 +820,12 @@ Write-Host "Found $($stationLinks.Count) station pages from homepage."
 
 # Get additional links from category pages (with category info)
 $categoryLinks = Get-StationLinksFromCategories -Client $client
+if ($null -eq $categoryLinks) { $categoryLinks = @() }
 Write-Host "Found $($categoryLinks.Count) additional station pages from categories."
 
 # Get links from sitemap
 $sitemapLinks = Get-StationLinksFromSitemap -Client $client
+if ($null -eq $sitemapLinks) { $sitemapLinks = @() }
 Write-Host "Found $($sitemapLinks.Count) additional station pages from sitemap."
 
 # Function to extract category from station name
@@ -548,7 +854,8 @@ function Get-CategoryFromName {
     if ($lowerName -match 'damar türk|damar turk') {
         return $utf8.GetString([byte[]](0x41,0x72,0x61,0x62,0x65,0x73,0x6B))  # "Arabesk"
     }
-    if ($lowerName -match 'arabesk|besk|arabesk fm|arabesk radyo') {
+    # Check for arabesk - must be before pop check
+    if ($lowerName -match 'arabesk|besk|arabesk fm|arabesk radyo|radyo arabesk|pal besk|pal-besk') {
         return $utf8.GetString([byte[]](0x41,0x72,0x61,0x62,0x65,0x73,0x6B))  # "Arabesk"
     }
     if ($lowerName -match 'slow|romantik|romantic|akustik|kalp') {
@@ -578,6 +885,7 @@ function Get-CategoryFromName {
     if ($lowerName -match 'yabancı|yabanci|foreign|english|ingilizce|international|world music|joy fm|kiss fm|metro fm|fenomen|greatest hits|heart fm|number 1 dance|number 1 deep house|number 1 disco|bbc|berlin|radio veronika') {
         return $utf8.GetString([byte[]](0x59,0x61,0x62,0x61,0x6E,0x63,0xC4,0xB1))  # "Yabancı"
     }
+    # Note: "damar" removed from here - handled above as special case for "Damar Türk"
     # Note: "damar" removed from here - handled above as special case for "Damar Türk"
     if ($lowerName -match 'türk|turk|türkçe|turkce|turk fm|türk fm') {
         return $utf8.GetString([byte[]](0x50,0x6F,0x70))  # "Pop" - Turkish pop stations
@@ -643,10 +951,343 @@ foreach ($link in $sitemapLinks) {
     $allStationLinks.Add($link) | Out-Null
 }
 
+# Function to find missing stations with alternative methods
+function Get-MissingStations {
+    param(
+        [Parameter()][System.Net.Http.HttpClient]$Client
+    )
+    
+    $missingStations = @()
+    $utf8 = [System.Text.Encoding]::UTF8
+    
+    # Power Pop - try alternative URLs and direct stream search
+    Write-Host "Searching for Power Pop..."
+    $powerPopUrls = @(
+        'https://www.canliradyodinle.fm/power-pop-dinle.html',
+        'https://www.canliradyodinle.fm/power-pop.html',
+        'https://www.canliradyodinle.fm/radyo-power-pop-dinle.html'
+    )
+    
+    $powerPopFound = $false
+    foreach ($url in $powerPopUrls) {
+        try {
+            $content = $Client.GetStringAsync($url).GetAwaiter().GetResult()
+            if ($content -match 'Power Pop|power.?pop') {
+                $info = Get-StationInfo -Url $url -Client $Client
+                if ($info -and $info.Streams.Count -gt 0) {
+                    $info.Category = $utf8.GetString([byte[]](0x50,0x6F,0x70))  # "Pop"
+                    $missingStations += $info
+                    $powerPopFound = $true
+                    Write-Host "  Found Power Pop via $url"
+                    break
+                }
+            }
+        } catch {
+            continue
+        }
+    }
+    
+    # If not found, try direct stream URLs for Power Pop
+    if (-not $powerPopFound) {
+        $powerPopStreams = @(
+            'https://listen.powerapp.com.tr/powerpop/mpeg/icecast.audio',
+            'https://listen.powerapp.com.tr/powerpop/abr/powerpop/128/playlist.m3u8'
+        )
+        $workingStream = $null
+        foreach ($stream in $powerPopStreams) {
+            try {
+                $testResult = Test-StreamAvailability -Url $stream -Client $Client -TimeoutSeconds 3
+                if ($testResult.IsWorking) {
+                    $workingStream = $stream
+                    break
+                }
+            } catch {
+                continue
+            }
+        }
+        if ($workingStream) {
+            $missingStations += [PSCustomObject]@{
+                Name = 'Power Pop'
+                Logo = 'https://www.canliradyodinle.fm/wp-content/uploads/power-pop-dinle.jpg'
+                Streams = @($workingStream)
+                Category = $utf8.GetString([byte[]](0x50,0x6F,0x70))  # "Pop"
+            }
+            Write-Host "  Found Power Pop via direct stream: $workingStream"
+        }
+    }
+    
+    # Show Radyo - try alternative URLs and direct stream search
+    Write-Host "Searching for Show Radyo..."
+    $showRadyoUrls = @(
+        'https://www.canliradyodinle.fm/show-radyo-dinle.html',
+        'https://www.canliradyodinle.fm/show-radyo.html',
+        'https://www.canliradyodinle.fm/radyo-show-dinle.html',
+        'https://www.showradyo.com.tr'
+    )
+    
+    $showRadyoFound = $false
+    foreach ($url in $showRadyoUrls) {
+        try {
+            $content = $Client.GetStringAsync($url).GetAwaiter().GetResult()
+            if ($content -match 'Show Radyo|Show Radio|show.?radyo') {
+                $info = Get-StationInfo -Url $url -Client $Client
+                if ($info -and $info.Streams.Count -gt 0) {
+                    $info.Category = $utf8.GetString([byte[]](0x48,0x61,0x62,0x65,0x72,0x20,0x26,0x20,0x53,0x70,0x6F,0x72))  # "Haber & Spor"
+                    $missingStations += $info
+                    $showRadyoFound = $true
+                    Write-Host "  Found Show Radyo via $url"
+                    break
+                }
+            }
+        } catch {
+            continue
+        }
+    }
+    
+    # If not found, try direct stream URLs for Show Radyo
+    if (-not $showRadyoFound) {
+        $showRadyoStreams = @(
+            'https://listen.showradyo.com.tr/stream',
+            'https://listen.showradyo.com.tr/stream/playlist.m3u8',
+            'https://showradyo.radyotvonline.net/showradyo'
+        )
+        $workingStream = $null
+        foreach ($stream in $showRadyoStreams) {
+            try {
+                $testResult = Test-StreamAvailability -Url $stream -Client $Client -TimeoutSeconds 3
+                if ($testResult.IsWorking) {
+                    $workingStream = $stream
+                    break
+                }
+            } catch {
+                continue
+            }
+        }
+        if ($workingStream) {
+            $missingStations += [PSCustomObject]@{
+                Name = 'Show Radyo'
+                Logo = 'https://www.canliradyodinle.fm/wp-content/uploads/show-radyo-dinle.jpg'
+                Streams = @($workingStream)
+                Category = $utf8.GetString([byte[]](0x48,0x61,0x62,0x65,0x72,0x20,0x26,0x20,0x53,0x70,0x6F,0x72))  # "Haber & Spor"
+            }
+            Write-Host "  Found Show Radyo via direct stream: $workingStream"
+        }
+    }
+    
+    # Radyo 7 - try alternative URLs and direct stream search
+    Write-Host "Searching for Radyo 7..."
+    $radyo7Urls = @(
+        'https://www.canliradyodinle.fm/radyo-7-dinle.html',
+        'https://www.canliradyodinle.fm/radyo-7.html',
+        'https://www.radyo7.com.tr',
+        'https://radyo7.com.tr'
+    )
+    
+    $radyo7Found = $false
+    foreach ($url in $radyo7Urls) {
+        try {
+            $content = $Client.GetStringAsync($url).GetAwaiter().GetResult()
+            if ($content -match 'Radyo 7|Radyo7|radyo.?7') {
+                $info = Get-StationInfo -Url $url -Client $Client
+                if ($info -and $info.Streams.Count -gt 0) {
+                    # Check if it's the main Radyo 7 (not the special edition like "Radyo 7 - Müslüm, Ferdi, Orhan")
+                    if ($info.Name -notmatch 'Müslüm|Ferdi|Orhan') {
+                        $info.Category = $utf8.GetString([byte[]](0x41,0x72,0x61,0x62,0x65,0x73,0x6B))  # "Arabesk"
+                        $missingStations += $info
+                        $radyo7Found = $true
+                        Write-Host "  Found Radyo 7 via $url"
+                        break
+                    }
+                }
+            }
+        } catch {
+            continue
+        }
+    }
+    
+    # If not found, try direct stream URLs for Radyo 7
+    if (-not $radyo7Found) {
+        $radyo7Streams = @(
+            'https://radyo7.radyotvonline.net/radyo7',
+            'https://radyo7.canliyayinda.com:7000/stream',
+            'https://radyo7.canliyayinda.com:7000/stream/playlist.m3u8',
+            'https://radyo7.radyotvonline.net/radyo7/stream'
+        )
+        $workingStream = $null
+        foreach ($stream in $radyo7Streams) {
+            try {
+                $testResult = Test-StreamAvailability -Url $stream -Client $Client -TimeoutSeconds 3
+                if ($testResult.IsWorking) {
+                    $workingStream = $stream
+                    break
+                }
+            } catch {
+                continue
+            }
+        }
+        if ($workingStream) {
+            $missingStations += [PSCustomObject]@{
+                Name = 'Radyo 7'
+                Logo = 'https://www.canliradyodinle.fm/wp-content/uploads/radyo-7-dinle.jpg'
+                Streams = @($workingStream)
+                Category = $utf8.GetString([byte[]](0x41,0x72,0x61,0x62,0x65,0x73,0x6B))  # "Arabesk"
+            }
+            Write-Host "  Found Radyo 7 via direct stream: $workingStream"
+        }
+    }
+    
+    # Radyo Viva - try alternative URLs and direct stream search
+    Write-Host "Searching for Radyo Viva..."
+    $radyoVivaUrls = @(
+        'https://www.canliradyodinle.fm/radyo-viva-dinle.html',
+        'https://www.canliradyodinle.fm/radyo-viva.html',
+        'https://www.radyo.viva.com.tr',
+        'https://radyo.viva.com.tr',
+        'https://www.viva.com.tr/radyo'
+    )
+    
+    $radyoVivaFound = $false
+    foreach ($url in $radyoVivaUrls) {
+        try {
+            $content = $Client.GetStringAsync($url).GetAwaiter().GetResult()
+            if ($content -match 'Radyo Viva|Viva Radyo|radyo.?viva') {
+                $info = Get-StationInfo -Url $url -Client $Client
+                if ($info -and $info.Streams.Count -gt 0) {
+                    $info.Category = $utf8.GetString([byte[]](0xC4,0xB0,0x73,0x6C,0x61,0x6D,0x69))  # "İslami"
+                    $missingStations += $info
+                    $radyoVivaFound = $true
+                    Write-Host "  Found Radyo Viva via $url"
+                    break
+                }
+            }
+        } catch {
+            continue
+        }
+    }
+    
+    # If not found, try direct stream URLs for Radyo Viva
+    if (-not $radyoVivaFound) {
+        $radyoVivaStreams = @(
+            'https://radyo.viva.com.tr/stream',
+            'https://radyo.viva.com.tr/stream/playlist.m3u8',
+            'https://viva.radyotvonline.net/viva',
+            'https://listen.viva.com.tr/stream'
+        )
+        $workingStream = $null
+        foreach ($stream in $radyoVivaStreams) {
+            try {
+                $testResult = Test-StreamAvailability -Url $stream -Client $Client -TimeoutSeconds 3
+                if ($testResult.IsWorking) {
+                    $workingStream = $stream
+                    break
+                }
+            } catch {
+                continue
+            }
+        }
+        if ($workingStream) {
+            $missingStations += [PSCustomObject]@{
+                Name = 'Radyo Viva'
+                Logo = 'https://www.canliradyodinle.fm/wp-content/uploads/radyo-viva-dinle.jpg'
+                Streams = @($workingStream)
+                Category = $utf8.GetString([byte[]](0xC4,0xB0,0x73,0x6C,0x61,0x6D,0x69))  # "İslami"
+            }
+            Write-Host "  Found Radyo Viva via direct stream: $workingStream"
+        }
+    }
+    
+    return $missingStations
+}
+
 $stationLinks = @($allStationLinks)
 Write-Host "Total unique station pages: $($stationLinks.Count)"
 
+# Function to generate station URLs from known station names (from homepage list)
+function Get-StationUrlsFromKnownNames {
+    param(
+        [Parameter()][System.Net.Http.HttpClient]$Client
+    )
+    
+    # Known station names from homepage (convert to URL slugs)
+    $knownStations = @(
+        'Power Pop', 'Power Türk Fm', 'Power FM', 'Power Love Fm',
+        'Show Radyo', 'Show 90lar',
+        'Radyo 7', 'Radyo 7 Nostalji', 'Radyo 7 Türkü',
+        'Radyo Viva',
+        'Diyanet Radyo',
+        'Doksanlar FM',
+        'Fenomen Türk',
+        'İzmir İmbat Fm',
+        'Karadeniz Fm 98.2',
+        'Kral Fm', 'Kral Pop Radyo',
+        'Ntv Radyo',
+        'Number 1 Fm', 'Number One Türk',
+        'Pal Doğa', 'Pal FM', 'Pal Nostalji', 'Pal Station',
+        'Radyo 45lik',
+        'Radyo Arabesk',
+        'Radyo CNN Türk',
+        'Radyo D',
+        'Radyo İlef',
+        'Radyo Spor',
+        'Radyo Voyage',
+        'Slow 7'
+    )
+    
+    $generatedUrls = @()
+    foreach ($stationName in $knownStations) {
+        # Convert station name to URL slug
+        $slug = $stationName.ToLower()
+        $slug = $slug -replace '[^a-z0-9\s-]', ''  # Remove special characters
+        $slug = $slug -replace '\s+', '-'  # Replace spaces with hyphens
+        $slug = $slug -replace '-+', '-'  # Replace multiple hyphens with single
+        $slug = $slug.Trim('-')
+        
+        # Try common URL patterns
+        $urlPatterns = @(
+            "https://www.canliradyodinle.fm/$slug-dinle.html",
+            "https://www.canliradyodinle.fm/$slug.html",
+            "https://www.canliradyodinle.fm/radyo-$slug.html"
+        )
+        
+        foreach ($url in $urlPatterns) {
+            $generatedUrls += $url
+        }
+    }
+    
+    return $generatedUrls | Sort-Object -Unique
+}
+
+# Get missing stations using alternative methods
+Write-Host ""
+Write-Host "Searching for missing stations using alternative methods..."
+$missingStations = Get-MissingStations -Client $client
+Write-Host "Found $($missingStations.Count) missing station(s) via alternative methods."
+
+# Also add known station URLs from homepage list
+Write-Host ""
+Write-Host "Generating URLs from known station names..."
+$knownUrls = Get-StationUrlsFromKnownNames -Client $client
+Write-Host "Generated $($knownUrls.Count) potential station URLs from known names."
+
+# Add known URLs to station links if not already present
+$knownUrlSet = New-Object System.Collections.Generic.HashSet[string]
+foreach ($url in $knownUrls) {
+    $knownUrlSet.Add($url) | Out-Null
+}
+foreach ($url in $stationLinks) {
+    $knownUrlSet.Add($url) | Out-Null
+}
+$stationLinks = @($knownUrlSet)
+
 $stationInfos = @()
+
+# Add missing stations found via alternative methods
+foreach ($missingStation in $missingStations) {
+    if ($missingStation -and $missingStation.Streams.Count -gt 0) {
+        $stationInfos += $missingStation
+    }
+}
+
 foreach ($link in $stationLinks) {
     try {
         $info = Get-StationInfo -Url $link -Client $client
@@ -718,10 +1359,10 @@ if (-not $SkipStreamTest) {
     $handler.AllowAutoRedirect = $true
     $testClient = New-Object System.Net.Http.HttpClient($handler)
     $testClient.Timeout = [TimeSpan]::FromSeconds($StreamTestTimeout + 2)
-    $testClient.DefaultRequestHeaders.Add('User-Agent', 'PlusRadio/1.0 (+https://github.com)')
+    $testClient.DefaultRequestHeaders.Add('User-Agent', 'PlusRadio/1.0')
     Write-Host "Stream test modu aktif (timeout: $StreamTestTimeout saniye)"
 } else {
-    Write-Host "Stream test modu kapalı - tüm stream'ler eklenecek"
+    Write-Host "Stream test modu kapali - tum streamler eklenecek"
 }
 
 $testedCount = 0
